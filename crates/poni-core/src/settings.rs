@@ -120,6 +120,8 @@ pub struct Settings {
     /// after start and then twice a day (docs/updates.md), and say on the
     /// island once when a new version is out.
     pub update_check: bool,
+    /// Record foreground app time locally, once the person explicitly enables it.
+    pub time_tracker: bool,
 }
 
 /// What plays when a prayer's time comes.
@@ -188,6 +190,7 @@ impl Default for Settings {
             game_stats: false,
             game_peek: false,
             update_check: true,
+            time_tracker: false,
         }
     }
 }

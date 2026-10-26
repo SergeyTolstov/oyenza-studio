@@ -44,6 +44,7 @@ pub struct Store {
     /// Start-menu shortcut paths chosen on the Windows Apps page, in the
     /// order the person pinned them. Paths stay on this PC only.
     pub apps_favorites: Vec<String>,
+    pub time_tracker: crate::time_tracker::TimeTracker,
     /// Oyenza bill reminders already shown (`oyenza::notice_key`), so a bill
     /// is reminded of once even across restarts.
     pub oyenza_noticed: Vec<String>,
@@ -61,6 +62,7 @@ impl Default for Store {
             focus_sessions: BTreeMap::new(),
             last_page: String::new(),
             apps_favorites: Vec::new(),
+            time_tracker: crate::time_tracker::TimeTracker::default(),
             oyenza_noticed: Vec::new(),
             script: crate::script::Script::default(),
         }

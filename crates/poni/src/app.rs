@@ -1266,6 +1266,11 @@ impl App {
             TIMER_MINUTE => {
                 self.schedule_minute_timer();
                 self.close_idle_phone();
+                if self.st.settings.time_tracker && !self.locked && !self.display_off {
+                    self.refresh_time();
+                    self.st.store.time_tracker.observe(self.st.local.day_key(), self.st.unix, services::apps::foreground_name());
+                    self.st.save();
+                }
             }
             TIMER_TRAY => {
                 unsafe {

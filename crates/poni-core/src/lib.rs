@@ -41,6 +41,7 @@ pub mod store;
 pub mod svgpath;
 pub mod sysmon;
 pub mod timeline;
+pub mod time_tracker;
 pub mod todo;
 pub mod ttml;
 pub mod update;

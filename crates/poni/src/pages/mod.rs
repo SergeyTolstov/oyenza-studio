@@ -23,6 +23,7 @@ pub mod shelf;
 pub mod system;
 pub mod tasks;
 pub mod today;
+pub mod time_tracker;
 
 use crate::commands::Command;
 use crate::gfx::{TextStyle, Weight};
@@ -52,6 +53,7 @@ pub enum PageKind {
     Media,
     /// Installed Windows apps, discovered from Start only on demand.
     Apps,
+    TimeTracker,
     Focus,
     Health,
     Shelf,
@@ -74,9 +76,10 @@ pub enum PageKind {
 }
 
 impl PageKind {
-    pub const ALL: [PageKind; 14] = [
+    pub const ALL: [PageKind; 15] = [
         PageKind::Media,
         PageKind::Apps,
+        PageKind::TimeTracker,
         PageKind::Focus,
         PageKind::Health,
         PageKind::Shelf,
@@ -95,6 +98,7 @@ impl PageKind {
         match self {
             PageKind::Media => "media",
             PageKind::Apps => "apps",
+            PageKind::TimeTracker => "time",
             PageKind::Focus => "focus",
             PageKind::Health => "health",
             PageKind::Shelf => "shelf",
@@ -120,6 +124,7 @@ impl PageKind {
         match self {
             PageKind::Media => "Music",
             PageKind::Apps => "Apps",
+            PageKind::TimeTracker => "Time",
             PageKind::Focus => "Focus",
             PageKind::Health => "Health",
             PageKind::Shelf => "Shelf",
@@ -139,6 +144,7 @@ impl PageKind {
         match self {
             PageKind::Media => Icon::Music,
             PageKind::Apps => Icon::App,
+            PageKind::TimeTracker => Icon::Timer,
             PageKind::Focus => Icon::Timer,
             PageKind::Health => Icon::Steps,
             PageKind::Shelf => Icon::Tray,
@@ -179,6 +185,7 @@ pub fn tabs(st: &AppState) -> Vec<PageKind> {
         .into_iter()
         .filter(|p| match p {
             PageKind::Apps => cfg!(windows),
+            PageKind::TimeTracker => cfg!(windows),
             PageKind::Oyenza => st.oyenza.tab_visible(),
             PageKind::Prayer => st.prayer_on(),
             PageKind::Script => st.script_on(),
@@ -200,6 +207,7 @@ pub fn content_height(p: PageKind, st: &AppState) -> f32 {
     match p {
         PageKind::Media => media::height(st),
         PageKind::Apps => apps::height(st),
+        PageKind::TimeTracker => time_tracker::height(st),
         PageKind::Focus => focus::height(st),
         PageKind::Health => health::height(st),
         PageKind::Shelf => shelf::height(st),
@@ -332,6 +340,7 @@ pub(crate) fn draw_page(ui: &mut Ui, st: &mut AppState, area: Rect, page: PageKi
     match page {
         PageKind::Media => media::draw(ui, st, area),
         PageKind::Apps => apps::draw(ui, st, area),
+        PageKind::TimeTracker => time_tracker::draw(ui, st, area),
         PageKind::Focus => focus::draw(ui, st, area),
         PageKind::Health => health::draw(ui, st, area),
         PageKind::Shelf => shelf::draw(ui, st, area),

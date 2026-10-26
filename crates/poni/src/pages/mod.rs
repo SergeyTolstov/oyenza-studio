@@ -237,6 +237,7 @@ pub fn next_wake(page: PageKind, st: &AppState) -> Option<f64> {
         PageKind::Script => script::next_wake(st),
         PageKind::Prayer => prayer::next_wake(st),
         PageKind::Today => today::next_wake(st),
+        PageKind::TimeTracker => time_tracker::next_wake(st),
         _ => None,
     };
     // Oyen in the header blinks and flicks an ear now and then.

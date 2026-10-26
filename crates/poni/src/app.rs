@@ -3552,6 +3552,11 @@ impl App {
                 self.oyenza(OyenzaCmd::Refresh);
             } else if p == PageKind::Health {
                 self.oyenza(OyenzaCmd::RefreshHealth);
+            } else if p == PageKind::Apps {
+                // The Start menu may have changed since the last visit. The
+                // Apps page asks once during its next draw, never at rest.
+                self.st.launch_apps.clear();
+                self.st.ui.apps_loading = false;
             }
         }
     }

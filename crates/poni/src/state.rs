@@ -270,6 +270,8 @@ pub struct PageUiState {
     pub apps_query: String,
     /// A single Start-menu scan is in flight for the Apps page.
     pub apps_loading: bool,
+    /// Apps page filter: show the saved pins rather than every Start-menu app.
+    pub apps_favorites_only: bool,
     pub task_input: String,
     pub task_scroll: f32,
     pub clip_scroll: f32,

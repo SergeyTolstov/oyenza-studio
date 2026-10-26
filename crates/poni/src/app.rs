@@ -1936,6 +1936,10 @@ impl App {
                 }
             }
             AppEvent::Stats(s) => self.st.stats = s,
+            AppEvent::Apps(apps) => {
+                self.st.launch_apps = apps;
+                self.st.ui.apps_loading = false;
+            }
             AppEvent::System(m) => {
                 // A reading still on its way when the page closed is dropped.
                 if self.sysmon_on || self.st.game.active {
@@ -3626,6 +3630,7 @@ impl App {
                         services::imaging::load_thumb_async(path, self.sink.clone());
                     }
                 }
+                Command::RefreshApps => services::apps::refresh(self.sink.clone()),
                 Command::SetPinned(b) => {
                     self.st.pinned = b;
                     if !b {

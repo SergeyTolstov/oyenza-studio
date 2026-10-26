@@ -1345,6 +1345,9 @@ impl App {
                 self.st.shelf_thumbs.insert(path, image);
             }
             AppEvent::Stats(s) => self.st.stats = s,
+            // The Apps page is Windows-only; this variant keeps the shared
+            // state/event contract exhaustive without probing macOS here.
+            AppEvent::Apps(_) => {}
             AppEvent::System(m) => {
                 // A reading still on its way when the page closed is dropped.
                 if self.sysmon_on {
@@ -2218,6 +2221,7 @@ impl App {
                         services::thumbs::app_icon_async(p, pages::system::icon_px(self.gfx.scale()), self.sink.clone());
                     }
                 }
+                Command::RefreshApps => {}
                 // Show over games reads Windows' frame log; the Mac has no Games view.
                 Command::CheckFps | Command::AllowFps => {}
                 Command::SetPinned(b) => {

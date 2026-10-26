@@ -266,6 +266,10 @@ impl PhoneDrop {
 /// Transient per-page UI state (scroll offsets, text being typed, …).
 #[derive(Clone, Debug, Default)]
 pub struct PageUiState {
+    /// Windows Apps page: case-insensitive words to match against Start menu entries.
+    pub apps_query: String,
+    /// A single Start-menu scan is in flight for the Apps page.
+    pub apps_loading: bool,
     pub task_input: String,
     pub task_scroll: f32,
     pub clip_scroll: f32,
@@ -298,6 +302,14 @@ pub struct PageUiState {
     /// the side of the camera they peek out from (`mac/notch.rs`).
     #[cfg(target_os = "macos")]
     pub peek: poni_core::peek::Peek,
+}
+
+/// One launchable Start-menu entry. The path is kept private to this PC and
+/// is only handed back to Windows' shell when the person presses it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LaunchApp {
+    pub name: String,
+    pub path: String,
 }
 
 /// Whether Windows lets Oyenza Studio read a game's frames. Its event tracing
@@ -485,6 +497,8 @@ pub struct AppState {
     pub shelf_thumbs: HashMap<String, Option<Image>>,
     /// Icons of the apps the System page lists, by executable path (None = loading or none).
     pub app_icons: HashMap<String, Option<Image>>,
+    /// Launchable entries discovered from the current user's Start menu.
+    pub launch_apps: Vec<LaunchApp>,
     pub ui: PageUiState,
     /// System accent colour (falls back to blue).
     pub accent: Color,
@@ -574,6 +588,7 @@ impl AppState {
             game: GameState::default(),
             shelf_thumbs: HashMap::new(),
             app_icons: HashMap::new(),
+            launch_apps: Vec::new(),
             ui: PageUiState::default(),
             accent: palette::BLUE,
             health: None,

@@ -10,6 +10,7 @@
 //! files, saving, …).
 
 pub mod addons;
+pub mod apps;
 pub mod clipboard;
 pub mod focus;
 pub mod health;
@@ -49,6 +50,8 @@ pub fn header_rect(body: Rect) -> Rect {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PageKind {
     Media,
+    /// Installed Windows apps, discovered from Start only on demand.
+    Apps,
     Focus,
     Health,
     Shelf,
@@ -71,8 +74,9 @@ pub enum PageKind {
 }
 
 impl PageKind {
-    pub const ALL: [PageKind; 13] = [
+    pub const ALL: [PageKind; 14] = [
         PageKind::Media,
+        PageKind::Apps,
         PageKind::Focus,
         PageKind::Health,
         PageKind::Shelf,
@@ -90,6 +94,7 @@ impl PageKind {
     pub fn key(self) -> &'static str {
         match self {
             PageKind::Media => "media",
+            PageKind::Apps => "apps",
             PageKind::Focus => "focus",
             PageKind::Health => "health",
             PageKind::Shelf => "shelf",
@@ -114,6 +119,7 @@ impl PageKind {
     pub fn title(self) -> &'static str {
         match self {
             PageKind::Media => "Music",
+            PageKind::Apps => "Apps",
             PageKind::Focus => "Focus",
             PageKind::Health => "Health",
             PageKind::Shelf => "Shelf",
@@ -132,6 +138,7 @@ impl PageKind {
     pub fn icon(self) -> Icon {
         match self {
             PageKind::Media => Icon::Music,
+            PageKind::Apps => Icon::App,
             PageKind::Focus => Icon::Timer,
             PageKind::Health => Icon::Steps,
             PageKind::Shelf => Icon::Tray,
@@ -171,6 +178,7 @@ pub fn tabs(st: &AppState) -> Vec<PageKind> {
     PageKind::ALL
         .into_iter()
         .filter(|p| match p {
+            PageKind::Apps => cfg!(windows),
             PageKind::Oyenza => st.oyenza.tab_visible(),
             PageKind::Prayer => st.prayer_on(),
             PageKind::Script => st.script_on(),
@@ -191,6 +199,7 @@ pub fn step_tab(p: PageKind, st: &AppState, forward: bool) -> PageKind {
 pub fn content_height(p: PageKind, st: &AppState) -> f32 {
     match p {
         PageKind::Media => media::height(st),
+        PageKind::Apps => apps::height(st),
         PageKind::Focus => focus::height(st),
         PageKind::Health => health::height(st),
         PageKind::Shelf => shelf::height(st),
@@ -322,6 +331,7 @@ pub(crate) fn draw_pages(ui: &mut Ui, st: &mut AppState, body: Rect, header: Rec
 pub(crate) fn draw_page(ui: &mut Ui, st: &mut AppState, area: Rect, page: PageKind) {
     match page {
         PageKind::Media => media::draw(ui, st, area),
+        PageKind::Apps => apps::draw(ui, st, area),
         PageKind::Focus => focus::draw(ui, st, area),
         PageKind::Health => health::draw(ui, st, area),
         PageKind::Shelf => shelf::draw(ui, st, area),

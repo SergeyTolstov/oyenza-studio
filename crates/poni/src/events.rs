@@ -4,7 +4,7 @@
 //! `WM_APP_EVENT` to the island window; the UI thread drains the channel.
 
 use crate::gfx::Image;
-use crate::state::{MediaSession, PowerState, SysStats};
+use crate::state::{LaunchApp, MediaSession, PowerState, SysStats};
 use poni_core::health::HealthSnapshot;
 use poni_core::lrc::Lyrics;
 use poni_core::agenda;
@@ -155,6 +155,8 @@ pub enum AppEvent {
     DragHover(bool),
     ShelfThumb { path: String, image: Option<Image> },
     Stats(SysStats),
+    /// Start-menu entries, read on demand for the Apps page.
+    Apps(Vec<LaunchApp>),
     /// The System page's latest reading and the minute behind it
     /// (`services::sysmon`, each second while the page is open).
     System(Box<poni_core::sysmon::Monitor>),

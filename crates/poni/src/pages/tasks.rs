@@ -15,14 +15,16 @@
 use crate::gfx::TextStyle;
 use crate::icons::Icon;
 use crate::state::AppState;
-use crate::ui::{wid, wid_n, PillStyle, Ui, WidgetId, PILL_SMALL};
+use crate::ui::{wid, wid_n, PillStyle, Ui, WidgetId, PILL_REGULAR, PILL_SMALL};
 use poni_core::geom::{palette, Color, Point, Rect};
-use poni_core::datetime::{civil_from_days, days_from_civil, days_in_month};
+use poni_core::datetime::{civil_from_days, days_from_civil, days_in_month, fmt_countdown};
 use poni_core::todo::{Task, MAX_TASKS, MAX_TASK_LEN};
 use std::cell::Cell;
 use std::collections::HashMap;
 
-const HEIGHT: f32 = 234.0;
+const HEIGHT: f32 = 300.0;
+const PANEL_GAP: f32 = 14.0;
+const PANEL_RATIO: f32 = 0.36;
 const INPUT_H: f32 = 34.0;
 const REMINDER_Y: f32 = 38.0;
 const REMINDER_H: f32 = 28.0;
@@ -131,16 +133,19 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
         make_room(st, day_start);
     }
     let full = st.store.tasks.tasks.len() >= MAX_TASKS;
+    let panel_w = (area.w * PANEL_RATIO).clamp(174.0, 244.0);
+    let task_area = Rect::new(area.x, area.y, (area.w - panel_w - PANEL_GAP).max(0.0), area.h);
+    let panel = Rect::new(task_area.right() + PANEL_GAP, area.y, panel_w, area.h);
 
     // ---- Input and an optional local reminder for the new task.
-    let input_r = Rect::new(area.x, area.y, area.w, INPUT_H);
+    let input_r = Rect::new(task_area.x, task_area.y, task_area.w, INPUT_H);
     let placeholder = if full { "Task list is full" } else { "Add a task, Enter to save" };
     let accent = st.accent;
     let resp = ui.text_input_row(wid("tasks.input"), input_r, &mut st.ui.task_input, placeholder, MAX_TASK_LEN, accent, Some(Icon::Plus));
     if resp.submitted {
         submit(ui, st, &mut anim, day_start);
     }
-    let reminder_r = Rect::new(area.x, area.y + REMINDER_Y, area.w - 112.0, REMINDER_H);
+    let reminder_r = Rect::new(task_area.x, task_area.y + REMINDER_Y, task_area.w - 112.0, REMINDER_H);
     ui.text_input_row(wid("tasks.reminder"), reminder_r, &mut st.ui.task_reminder, "Reminder: 27.10 18:30", 16, accent, Some(Icon::Clock));
     let quick_r = Rect::new(reminder_r.right() + 8.0, reminder_r.y, 104.0, REMINDER_H);
     let quick_on = st.ui.task_reminder.trim().eq_ignore_ascii_case("in 30 min");
@@ -149,8 +154,8 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
     }
 
     // ---- List.
-    let view = Rect::new(area.x, area.y + LIST_TOP, area.w, LIST_H);
-    let footer_r = Rect::new(area.x, area.y + HEIGHT - FOOTER_H, area.w, FOOTER_H);
+    let view = Rect::new(task_area.x, task_area.y + LIST_TOP, task_area.w, LIST_H);
+    let footer_r = Rect::new(task_area.x, task_area.y + HEIGHT - FOOTER_H, task_area.w, FOOTER_H);
     let mut items: Vec<(u64, (bool, String, Option<String>))> = st.store.tasks.display_order(day_start).into_iter().map(|t| (t.id, (t.done, t.text.clone(), t.remind_unix.map(|at| reminder_label(st, at))))).collect();
     // Keep the order of the last toggle while the pointer is still over the list.
     let over_list = ui.hovered(view);
@@ -162,7 +167,7 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
     }
 
     if items.is_empty() {
-        let hint_area = Rect::new(area.x, view.y, area.w, HEIGHT - LIST_TOP);
+        let hint_area = Rect::new(task_area.x, view.y, task_area.w, HEIGHT - LIST_TOP);
         super::empty_state(ui, hint_area, Icon::ListChecks, "Nothing on your list", "Done tasks clear at the end of the day");
         st.ui.task_scroll = 0.0;
         anim.scroll = 0.0;
@@ -198,7 +203,7 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
             if appear < 1.0 {
                 moving = true;
             }
-            let row = Rect::new(area.x, view.y + y - anim.scroll + 6.0 * (1.0 - ease_out_cubic(appear)), area.w, ROW_H);
+            let row = Rect::new(task_area.x, view.y + y - anim.scroll + 6.0 * (1.0 - ease_out_cubic(appear)), task_area.w, ROW_H);
             let Some(hit) = intersect(row, view) else { continue };
             let pop = match anim.toggled {
                 Some((tid, t0)) if tid == *id => {
@@ -254,6 +259,8 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
         draw_footer(ui, st, footer_r, day_start, full, &mut anim, undo_id);
     }
 
+    draw_workspace_panel(ui, st, panel);
+
     anim.appeared.retain(|_, t0| now - *t0 < APPEAR_S);
     if anim.toggled.is_some_and(|(_, t0)| now - t0 >= POP_S) {
         anim.toggled = None;
@@ -296,6 +303,53 @@ fn submit(ui: &mut Ui, st: &mut AppState, anim: &mut ListAnim, day_start: i64) {
         } else if y < st.ui.task_scroll {
             st.ui.task_scroll = y;
         }
+    }
+}
+
+/// The right side of Tasks: one shared Pomodoro, then the upcoming task
+/// reminders. It is intentionally a dashboard, not a second Focus page.
+fn draw_workspace_panel(ui: &mut Ui, st: &mut AppState, r: Rect) {
+    ui.c.fill_rrect(r, 18.0, palette::SURFACE.with_alpha(0.72));
+    let now = st.now;
+    let running = st.pomodoro.is_running();
+    let active = st.pomodoro.is_active();
+    let color = crate::pages::focus::phase_color(st.pomodoro.phase);
+    let center = Point::new(r.x + 47.0, r.y + 50.0);
+    ui.c.ring(center, 33.0, 5.0, st.pomodoro.progress(now), RING_TRACK, if running { color } else { color.mul_alpha(0.65) });
+    let countdown = fmt_countdown(st.pomodoro.remaining(now));
+    ui.c.text(&countdown, Rect::new(center.x - 35.0, center.y - 12.0, 70.0, 24.0), &TextStyle::new(20.0).weight(crate::gfx::Weight::Semibold).tabular().center().color(palette::TEXT));
+    ui.c.text(if running { "Focus running" } else if active { "Focus paused" } else { "Focus timer" }, Rect::new(center.x - 37.0, center.y + 13.0, 74.0, 14.0), &TextStyle::caption().color(palette::TEXT_DIM).center());
+    let control_x = center.x + 47.0;
+    let control_w = (r.right() - control_x - 12.0).max(0.0);
+    let (label, icon) = if running { ("Pause", Icon::Pause) } else if active { ("Resume", Icon::Play) } else { ("Start", Icon::Play) };
+    let main_r = Rect::new(control_x, r.y + 22.0, control_w, PILL_REGULAR);
+    if ui.pill(wid("tasks.focus.toggle"), main_r, label, Some(icon), PillStyle::Primary(color)).clicked {
+        st.pomodoro.toggle(now);
+    }
+    let reset_r = Rect::new(control_x, main_r.bottom() + 8.0, control_w, PILL_SMALL);
+    if ui.pill(wid("tasks.focus.reset"), reset_r, "Reset", Some(Icon::Reset), PillStyle::Utility).clicked {
+        st.pomodoro.reset();
+    }
+    if running {
+        ui.request_anim();
+    }
+
+    let rule_y = r.y + 96.0;
+    ui.c.fill_rect(Rect::new(r.x + 12.0, rule_y, r.w - 24.0, 1.0 / ui.c.scale().max(0.5)), Color::white(0.12));
+    let mut reminders: Vec<_> = st.store.tasks.tasks.iter().filter(|task| !task.done).filter_map(|task| task.remind_unix.map(|at| (at, task.text.as_str()))).collect();
+    reminders.sort_by_key(|(at, _)| *at);
+    let heading = format!("Reminders ({})", reminders.len());
+    ui.c.icon(Icon::Clock, Rect::new(r.x + 14.0, rule_y + 16.0, 14.0, 14.0), palette::TEXT_DIM);
+    ui.c.text(&heading, Rect::new(r.x + 34.0, rule_y + 12.0, r.w - 46.0, 22.0), &TextStyle::body().weight(crate::gfx::Weight::Semibold).color(palette::TEXT_DIM));
+    if reminders.is_empty() {
+        ui.c.text("Add a date or use In 30 min", Rect::new(r.x + 14.0, rule_y + 43.0, r.w - 28.0, 18.0), &TextStyle::footnote().color(palette::TEXT_FAINT));
+        return;
+    }
+    for (i, (at, text)) in reminders.into_iter().take(4).enumerate() {
+        let y = rule_y + 42.0 + i as f32 * 39.0;
+        ui.c.icon(Icon::Clock, Rect::new(r.x + 14.0, y + 4.0, 13.0, 13.0), palette::TEXT_FAINT);
+        ui.c.text(text, Rect::new(r.x + 34.0, y, r.w - 48.0, 19.0), &TextStyle::body().color(palette::TEXT));
+        ui.c.text(&reminder_label(st, at), Rect::new(r.x + 34.0, y + 17.0, r.w - 48.0, 16.0), &TextStyle::footnote().color(palette::TEXT_FAINT));
     }
 }
 

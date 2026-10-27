@@ -274,6 +274,8 @@ pub struct PageUiState {
     pub apps_favorites_only: bool,
     /// Apps page filter: recently launched shortcuts.
     pub apps_recent_only: bool,
+    /// Draft date/time for the next Task reminder.
+    pub task_reminder: String,
     /// New work-timer comment on the Time page.
     pub timer_comment: String,
     pub task_input: String,

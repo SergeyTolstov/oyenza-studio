@@ -2737,6 +2737,7 @@ impl App {
         if let Some(ended) = self.st.pomodoro.tick(now) {
             pages::focus::on_phase_ended(&mut self.st, ended);
         }
+        self.task_reminder_tick();
         // Signed out: the Oyenza tab is gone.
         if self.st.page == PageKind::Oyenza && !self.st.oyenza.tab_visible() {
             self.st.page = PageKind::ALL[0];
@@ -2746,6 +2747,19 @@ impl App {
         // Prayer times switched off: its tab is gone.
         if self.st.page == PageKind::Prayer && !self.st.prayer_on() {
             self.st.page = PageKind::Addons;
+        }
+    }
+
+    /// Surface one due task at a time in the same compact Island notice used
+    /// by focus and system reminders. A task is marked first, so it doesn't
+    /// repeat after a restart or on every frame.
+    fn task_reminder_tick(&mut self) {
+        let due = self.st.store.tasks.due_reminder(self.st.unix).map(|task| (task.id, task.text.clone()));
+        let Some((id, text)) = due else { return };
+        if self.st.store.tasks.mark_reminder_shown(id) {
+            self.st.save();
+            self.st.notify(Icon::ListChecks, self.st.accent, "Task reminder", text, self.st.settings.task_reminder_secs as f64, Some(NoticeAction::OpenPage(PageKind::Tasks)));
+            self.st.chime();
         }
     }
 

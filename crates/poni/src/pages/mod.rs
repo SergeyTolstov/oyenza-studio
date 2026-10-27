@@ -116,7 +116,7 @@ impl PageKind {
 
     pub fn from_key(s: &str) -> PageKind {
         // Removed pages and the old Water page open the first page instead.
-        let s = if matches!(s.trim().to_ascii_lowercase().as_str(), "water" | "health" | "addons" | "today") { "media" } else { s.trim() };
+        let s = if matches!(s.trim().to_ascii_lowercase().as_str(), "water" | "health" | "addons" | "today" | "shelf") { "media" } else { s.trim() };
         Self::ALL.into_iter().find(|p| p.key().eq_ignore_ascii_case(s)).unwrap_or(PageKind::Media)
     }
 
@@ -186,7 +186,7 @@ pub fn tabs(st: &AppState) -> Vec<PageKind> {
         .filter(|p| match p {
             // Health and Add-ons are no longer part of the product UI. Their
             // data types remain for a compatible upgrade path.
-            PageKind::Health | PageKind::Addons => false,
+            PageKind::Health | PageKind::Addons | PageKind::Shelf => false,
             PageKind::Today => false,
             PageKind::Apps => cfg!(windows),
             PageKind::TimeTracker => cfg!(windows),

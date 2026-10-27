@@ -17,15 +17,18 @@ use crate::icons::Icon;
 use crate::state::AppState;
 use crate::ui::{wid, wid_n, PillStyle, Ui, WidgetId, PILL_SMALL};
 use poni_core::geom::{palette, Color, Point, Rect};
+use poni_core::datetime::{civil_from_days, days_from_civil, days_in_month};
 use poni_core::todo::{Task, MAX_TASKS, MAX_TASK_LEN};
 use std::cell::Cell;
 use std::collections::HashMap;
 
-const HEIGHT: f32 = 200.0;
+const HEIGHT: f32 = 234.0;
 const INPUT_H: f32 = 34.0;
+const REMINDER_Y: f32 = 38.0;
+const REMINDER_H: f32 = 28.0;
 const ROW_H: f32 = 31.0;
 /// List viewport, relative to the page top: exactly four rows.
-const LIST_TOP: f32 = 44.0;
+const LIST_TOP: f32 = 78.0;
 const LIST_H: f32 = 4.0 * ROW_H;
 /// The footer holds a Small capsule, so it is exactly that tall.
 const FOOTER_H: f32 = PILL_SMALL;
@@ -129,7 +132,7 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
     }
     let full = st.store.tasks.tasks.len() >= MAX_TASKS;
 
-    // ---- Input: the list's first row, sharing its checkbox and text columns.
+    // ---- Input and an optional local reminder for the new task.
     let input_r = Rect::new(area.x, area.y, area.w, INPUT_H);
     let placeholder = if full { "Task list is full" } else { "Add a task, Enter to save" };
     let accent = st.accent;
@@ -137,11 +140,18 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
     if resp.submitted {
         submit(ui, st, &mut anim, day_start);
     }
+    let reminder_r = Rect::new(area.x, area.y + REMINDER_Y, area.w - 112.0, REMINDER_H);
+    ui.text_input_row(wid("tasks.reminder"), reminder_r, &mut st.ui.task_reminder, "Reminder: 27.10 18:30", 16, accent, Some(Icon::Clock));
+    let quick_r = Rect::new(reminder_r.right() + 8.0, reminder_r.y, 104.0, REMINDER_H);
+    let quick_on = st.ui.task_reminder.trim().eq_ignore_ascii_case("in 30 min");
+    if ui.pill(wid("tasks.remind_30"), quick_r, "In 30 min", Some(Icon::Clock), if quick_on { PillStyle::Primary(accent) } else { PillStyle::Neutral }).clicked {
+        st.ui.task_reminder = if quick_on { String::new() } else { "in 30 min".into() };
+    }
 
     // ---- List.
     let view = Rect::new(area.x, area.y + LIST_TOP, area.w, LIST_H);
     let footer_r = Rect::new(area.x, area.y + HEIGHT - FOOTER_H, area.w, FOOTER_H);
-    let mut items: Vec<(u64, (bool, String))> = st.store.tasks.display_order(day_start).into_iter().map(|t| (t.id, (t.done, t.text.clone()))).collect();
+    let mut items: Vec<(u64, (bool, String, Option<String>))> = st.store.tasks.display_order(day_start).into_iter().map(|t| (t.id, (t.done, t.text.clone(), t.remind_unix.map(|at| reminder_label(st, at))))).collect();
     // Keep the order of the last toggle while the pointer is still over the list.
     let over_list = ui.hovered(view);
     if !anim.frozen.as_ref().is_some_and(|(_, t0)| over_list && now - t0 < FREEZE_S) {
@@ -176,7 +186,7 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
         let mut delete = None;
         let mut rows = HashMap::with_capacity(items.len());
         ui.c.clip(view);
-        for (i, (id, (done, text))) in items.iter().enumerate() {
+        for (i, (id, (done, text, reminder))) in items.iter().enumerate() {
             let target = i as f32 * ROW_H;
             let (y, m) = match anim.rows.get(id) {
                 Some(&y0) => glide(y0, target, dt),
@@ -204,7 +214,7 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
             ui.c.set_alpha(prev_alpha * appear);
             // A row on the move glides between pixels; at rest it sits on whole pixels.
             let snap_was = ui.c.set_text_snap(!(scrolling || m || appear < 1.0));
-            let action = draw_row(ui, row, hit, view, *id, *done, text, pop);
+            let action = draw_row(ui, row, hit, view, *id, *done, text, reminder.as_deref(), pop);
             ui.c.set_text_snap(snap_was);
             ui.c.set_alpha(prev_alpha);
             match action {
@@ -263,8 +273,17 @@ fn submit(ui: &mut Ui, st: &mut AppState, anim: &mut ListAnim, day_start: i64) {
         ui.input.caret = 0;
         return;
     }
+    let reminder = match parse_reminder(&st.ui.task_reminder, st) {
+        Ok(at) => at,
+        Err(message) => {
+            st.notify(Icon::Clock, palette::ORANGE, "Reminder wasn't saved", message, st.settings.task_reminder_secs as f64, None);
+            return;
+        }
+    };
     let Some(id) = st.store.tasks.add(&st.ui.task_input, st.unix) else { return };
+    st.store.tasks.set_reminder(id, reminder);
     st.ui.task_input.clear();
+    st.ui.task_reminder.clear();
     ui.input.caret = 0;
     st.save();
     anim.appeared.insert(id, st.now);
@@ -277,6 +296,75 @@ fn submit(ui: &mut Ui, st: &mut AppState, anim: &mut ListAnim, day_start: i64) {
         } else if y < st.ui.task_scroll {
             st.ui.task_scroll = y;
         }
+    }
+}
+
+/// Parse a reminder as `27.10 18:30`, `2026-10-27 18:30`, `18:30` (today)
+/// or the quick-choice value `in 30 min`.  The conversion deliberately uses
+/// the current local day as its anchor, so no network calendar is involved.
+fn parse_reminder(input: &str, st: &AppState) -> Result<Option<i64>, &'static str> {
+    let input = input.trim();
+    if input.is_empty() {
+        return Ok(None);
+    }
+    if input.eq_ignore_ascii_case("in 30 min") {
+        return Ok(Some(st.unix + 30 * 60));
+    }
+    let mut parts = input.split_whitespace();
+    let first = parts.next().ok_or("Use 27.10 18:30")?;
+    let second = parts.next();
+    if parts.next().is_some() {
+        return Err("Use 27.10 18:30");
+    }
+    let (date, clock) = match second {
+        Some(clock) => (first, clock),
+        None if first.contains(':') => ("", first),
+        None => return Err("Add a time, for example 18:30"),
+    };
+    let (hour, minute) = parse_clock(clock).ok_or("Time must look like 18:30")?;
+    let (year, month, day) = if date.is_empty() {
+        (st.local.year, st.local.month, st.local.day)
+    } else {
+        parse_date(date, st.local.year).ok_or("Date must look like 27.10 or 2026-10-27")?
+    };
+    if month == 0 || month > 12 || day == 0 || day > days_in_month(year, month) {
+        return Err("That date doesn't exist");
+    }
+    let now_days = days_from_civil(st.local.year, st.local.month, st.local.day);
+    let target_days = days_from_civil(year, month, day);
+    let at = st.day_start_unix() + (target_days - now_days) * 86_400 + i64::from(hour) * 3600 + i64::from(minute) * 60;
+    if at <= st.unix {
+        return Err("Choose a future date and time");
+    }
+    Ok(Some(at))
+}
+
+fn parse_clock(s: &str) -> Option<(u8, u8)> {
+    let (h, m) = s.split_once(':')?;
+    let h = h.parse::<u8>().ok()?;
+    let m = m.parse::<u8>().ok()?;
+    (h < 24 && m < 60).then_some((h, m))
+}
+
+fn parse_date(s: &str, default_year: i32) -> Option<(i32, u8, u8)> {
+    let parts: Vec<_> = s.split(['.', '-']).collect();
+    match parts.as_slice() {
+        [day, month] => Some((default_year, month.parse().ok()?, day.parse().ok()?)),
+        [year, month, day] => Some((year.parse().ok()?, month.parse().ok()?, day.parse().ok()?)),
+        _ => None,
+    }
+}
+
+fn reminder_label(st: &AppState, at: i64) -> String {
+    let local_seconds = at - st.day_start_unix();
+    let day_shift = local_seconds.div_euclid(86_400);
+    let seconds = local_seconds.rem_euclid(86_400);
+    let (year, month, day) = civil_from_days(days_from_civil(st.local.year, st.local.month, st.local.day) + day_shift);
+    let clock = format!("{:02}:{:02}", seconds / 3600, (seconds / 60) % 60);
+    if year == st.local.year && month == st.local.month && day == st.local.day {
+        clock
+    } else {
+        format!("{day:02}.{month:02} {clock}")
     }
 }
 
@@ -338,7 +426,7 @@ enum RowAction {
 
 /// One task row. `hit` is the part of `row` inside the list viewport `view`.
 #[allow(clippy::too_many_arguments)]
-fn draw_row(ui: &mut Ui, row: Rect, hit: Rect, view: Rect, id: u64, done: bool, text: &str, pop: Option<f32>) -> RowAction {
+fn draw_row(ui: &mut Ui, row: Rect, hit: Rect, view: Rect, id: u64, done: bool, text: &str, reminder: Option<&str>, pop: Option<f32>) -> RowAction {
     let mut action = RowAction::None;
     let resp = ui.button(wid_n("tasks.row", id), hit);
     if resp.pressed {
@@ -365,7 +453,8 @@ fn draw_row(ui: &mut Ui, row: Rect, hit: Rect, view: Rect, id: u64, done: bool, 
 
     // Text, struck through when done (the line sweeps in right after checking).
     let tx = row.x + TEXT_X;
-    let tw = (row.w - TEXT_X - 40.0).max(0.0);
+    let reminder_w = reminder.map(|s| ui.c.measure(s, &TextStyle::footnote(), 90.0).0 + 20.0).unwrap_or(0.0);
+    let tw = (row.w - TEXT_X - 40.0 - reminder_w).max(0.0);
     let style = TextStyle::body().color(if done { palette::TEXT_FAINT } else { palette::TEXT });
     ui.c.text(text, Rect::new(tx, row.y, tw, row.h), &style);
     if done && tw > 0.0 {
@@ -375,6 +464,12 @@ fn draw_row(ui: &mut Ui, row: Rect, hit: Rect, view: Rect, id: u64, done: bool, 
             let y = cy + 1.0;
             ui.c.line(Point::new(tx - 1.0, y), Point::new(tx - 1.0 + (w + 2.0) * sweep, y), palette::TEXT_FAINT, 1.2);
         }
+    }
+
+    if let Some(label) = reminder {
+        let r = Rect::new(row.right() - 38.0 - reminder_w, row.y, reminder_w, row.h);
+        ui.c.icon(Icon::Clock, Rect::new(r.x, r.center().y - 6.0, 12.0, 12.0), palette::TEXT_FAINT);
+        ui.c.text(label, Rect::new(r.x + 16.0, r.y, r.w - 16.0, r.h), &TextStyle::footnote().color(palette::TEXT_FAINT));
     }
 
     // Delete, only while hovering a fully visible row.
@@ -493,7 +588,7 @@ mod tests {
 
     #[test]
     fn undo_snapshots_accumulate() {
-        let task = |id: u64| Task { id, text: format!("t{id}"), done: false, created_unix: 0, done_unix: None };
+        let task = |id: u64| Task { id, text: format!("t{id}"), done: false, created_unix: 0, done_unix: None, remind_unix: None, reminder_shown: false };
         let mut anim = ListAnim::default();
         offer_undo(&mut anim, vec![task(1)], 1.0);
         offer_undo(&mut anim, vec![task(2)], 3.0);

@@ -13,6 +13,12 @@ pub struct Task {
     pub created_unix: i64,
     #[serde(default)]
     pub done_unix: Option<i64>,
+    /// Local task reminder, stored as an absolute Unix timestamp.
+    #[serde(default)]
+    pub remind_unix: Option<i64>,
+    /// A due reminder is shown only once, including after restarting Oyenza.
+    #[serde(default)]
+    pub reminder_shown: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -38,8 +44,27 @@ impl TaskList {
         let text: String = text.chars().take(MAX_TASK_LEN).collect();
         let id = self.next_id.max(1);
         self.next_id = id + 1;
-        self.tasks.push(Task { id, text, done: false, created_unix: now_unix, done_unix: None });
+        self.tasks.push(Task { id, text, done: false, created_unix: now_unix, done_unix: None, remind_unix: None, reminder_shown: false });
         Some(id)
+    }
+
+    /// Attach (or remove) the one reminder for a task.
+    pub fn set_reminder(&mut self, id: u64, remind_unix: Option<i64>) -> bool {
+        let Some(task) = self.tasks.iter_mut().find(|task| task.id == id) else { return false };
+        task.remind_unix = remind_unix;
+        task.reminder_shown = false;
+        true
+    }
+
+    /// First open task whose reminder is due and hasn't been surfaced yet.
+    pub fn due_reminder(&self, now_unix: i64) -> Option<&Task> {
+        self.tasks.iter().find(|task| !task.done && !task.reminder_shown && task.remind_unix.is_some_and(|at| at <= now_unix))
+    }
+
+    pub fn mark_reminder_shown(&mut self, id: u64) -> bool {
+        let Some(task) = self.tasks.iter_mut().find(|task| task.id == id) else { return false };
+        task.reminder_shown = true;
+        true
     }
 
     pub fn toggle(&mut self, id: u64, now_unix: i64) -> bool {
@@ -127,5 +152,18 @@ mod tests {
         let mut l = TaskList { tasks: vec![], next_id: 0 };
         assert_eq!(l.add("a", 0), Some(1));
         assert_eq!(l.add("b", 0), Some(2));
+    }
+
+    #[test]
+    fn a_reminder_is_due_once_until_changed() {
+        let mut l = TaskList::default();
+        let id = l.add("call back", 10).unwrap();
+        assert!(l.set_reminder(id, Some(100)));
+        assert!(l.due_reminder(99).is_none());
+        assert_eq!(l.due_reminder(100).map(|task| task.id), Some(id));
+        assert!(l.mark_reminder_shown(id));
+        assert!(l.due_reminder(1000).is_none());
+        assert!(l.set_reminder(id, Some(200)));
+        assert_eq!(l.due_reminder(200).map(|task| task.id), Some(id));
     }
 }

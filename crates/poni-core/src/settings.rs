@@ -47,7 +47,7 @@ pub enum MonitorChoice {
 }
 
 /// Bumped when defaults change in a way existing files should pick up.
-pub const SETTINGS_VERSION: u32 = 5;
+pub const SETTINGS_VERSION: u32 = 6;
 
 fn version_zero() -> u32 {
     0
@@ -122,6 +122,8 @@ pub struct Settings {
     pub update_check: bool,
     /// Record foreground app time locally, once the person explicitly enables it.
     pub time_tracker: bool,
+    /// How long a task reminder remains visible in the Island.
+    pub task_reminder_secs: u32,
 }
 
 /// What plays when a prayer's time comes.
@@ -191,6 +193,7 @@ impl Default for Settings {
             game_peek: false,
             update_check: true,
             time_tracker: false,
+            task_reminder_secs: 8,
         }
     }
 }
@@ -261,6 +264,10 @@ impl Settings {
         if self.settings_version < 5 {
             self.clipboard_history = true;
         }
+        // Shelf is no longer offered; old direct links return to Music.
+        if self.start_page.eq_ignore_ascii_case("shelf") {
+            self.start_page = "media".into();
+        }
         self.settings_version = self.settings_version.max(SETTINGS_VERSION);
         // Step aside is no longer offered: the island stays over maximized windows.
         self.step_aside = false;
@@ -271,6 +278,7 @@ impl Settings {
         self.hover_delay_ms = self.hover_delay_ms.min(2000);
         self.lyrics_offset_ms = self.lyrics_offset_ms.clamp(-5000, 5000);
         self.collapse_delay_ms = self.collapse_delay_ms.min(5000);
+        self.task_reminder_secs = self.task_reminder_secs.clamp(3, 30);
         if !self.expanded_width.is_finite() {
             self.expanded_width = 620.0;
         }

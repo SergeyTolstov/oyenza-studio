@@ -272,6 +272,8 @@ pub struct PageUiState {
     pub apps_loading: bool,
     /// Apps page filter: show the saved pins rather than every Start-menu app.
     pub apps_favorites_only: bool,
+    /// Apps page filter: recently launched shortcuts.
+    pub apps_recent_only: bool,
     /// New work-timer comment on the Time page.
     pub timer_comment: String,
     pub task_input: String,

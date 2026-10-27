@@ -22,12 +22,24 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
     ui.text_input_row(wid("apps.search"), search, &mut st.ui.apps_query, "Search installed apps", 80, st.accent, Some(Icon::App));
     let fav_label = format!("Favorites ({})", st.store.apps_favorites.len());
     let fav_r = Rect::new(area.x, area.y + FILTER_Y, 136.0, PILL_SMALL);
-    let all_r = Rect::new(fav_r.right() + 8.0, fav_r.y, 72.0, PILL_SMALL);
+    let recent_r = Rect::new(fav_r.right() + 8.0, fav_r.y, 94.0, PILL_SMALL);
+    let all_r = Rect::new(recent_r.right() + 8.0, fav_r.y, 66.0, PILL_SMALL);
+    let refresh_r = Rect::new(all_r.right() + 8.0, fav_r.y, PILL_SMALL, PILL_SMALL);
     if ui.pill(wid("apps.favorites"), fav_r, &fav_label, Some(Icon::PinFill), if st.ui.apps_favorites_only { PillStyle::Primary(st.accent) } else { PillStyle::Neutral }).clicked {
         st.ui.apps_favorites_only = true;
+        st.ui.apps_recent_only = false;
     }
-    if ui.pill(wid("apps.all"), all_r, "All", Some(Icon::App), if st.ui.apps_favorites_only { PillStyle::Neutral } else { PillStyle::Primary(st.accent) }).clicked {
+    if ui.pill(wid("apps.recent"), recent_r, "Recent", Some(Icon::Clock), if st.ui.apps_recent_only { PillStyle::Primary(st.accent) } else { PillStyle::Neutral }).clicked {
         st.ui.apps_favorites_only = false;
+        st.ui.apps_recent_only = true;
+    }
+    if ui.pill(wid("apps.all"), all_r, "All", Some(Icon::App), if !st.ui.apps_favorites_only && !st.ui.apps_recent_only { PillStyle::Primary(st.accent) } else { PillStyle::Neutral }).clicked {
+        st.ui.apps_favorites_only = false;
+        st.ui.apps_recent_only = false;
+    }
+    if ui.icon_button(wid("apps.refresh"), refresh_r, Icon::Reset, palette::TEXT_DIM, 14.0).clicked && !st.ui.apps_loading {
+        st.ui.apps_loading = true;
+        st.cmd(Command::RefreshApps);
     }
     if st.launch_apps.is_empty() {
         super::empty_state(ui, Rect::new(area.x, area.y + LIST_Y, area.w, HEIGHT - LIST_Y), Icon::App, "Loading apps", "Open this page to refresh your Start menu");
@@ -40,13 +52,15 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
     let words: Vec<String> = st.ui.apps_query.split_whitespace().map(|s| s.to_lowercase()).collect();
     let source: Vec<_> = if st.ui.apps_favorites_only {
         st.store.apps_favorites.iter().filter_map(|path| st.launch_apps.iter().find(|a| &a.path == path)).collect()
+    } else if st.ui.apps_recent_only {
+        st.store.apps_recent.iter().filter_map(|path| st.launch_apps.iter().find(|a| &a.path == path)).collect()
     } else { st.launch_apps.iter().collect() };
     let matches: Vec<_> = source.into_iter().filter(|a| {
         let name = a.name.to_lowercase();
         words.iter().all(|w| name.contains(w))
     }).take(MAX_ROWS).cloned().collect();
     if matches.is_empty() {
-        let (title, hint) = if st.ui.apps_favorites_only { ("No favorites yet", "Pin an app from All to keep it here") } else { ("No matching apps", "Try a different name") };
+        let (title, hint) = if st.ui.apps_favorites_only { ("No favorites yet", "Pin an app from All to keep it here") } else if st.ui.apps_recent_only { ("No recent apps", "Launch an app and it will appear here") } else { ("No matching apps", "Try a different name") };
         super::empty_state(ui, Rect::new(area.x, area.y + LIST_Y, area.w, HEIGHT - LIST_Y), Icon::App, title, hint);
         return;
     }
@@ -63,6 +77,12 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
             if saved { st.store.apps_favorites.retain(|p| p != &app.path); } else { st.store.apps_favorites.push(app.path.clone()); }
             st.save();
         }
-        if hit.clicked { st.cmd(Command::OpenPath(app.path.clone())); }
+        if hit.clicked {
+            st.store.apps_recent.retain(|p| p != &app.path);
+            st.store.apps_recent.insert(0, app.path.clone());
+            st.store.apps_recent.truncate(12);
+            st.save();
+            st.cmd(Command::OpenPath(app.path.clone()));
+        }
     }
 }

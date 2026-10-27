@@ -19,7 +19,7 @@ use crate::icons::Icon;
 use crate::island::Geom;
 use crate::state::{AppState, FpsAccess};
 use crate::ui::Ui;
-use poni_core::datetime::fmt_countdown;
+use poni_core::datetime::{fmt_countdown, fmt_duration};
 use poni_core::frames::fmt_fps;
 use poni_core::geom::{palette, Color, Point, Rect};
 use poni_core::pomodoro::Phase;
@@ -80,6 +80,7 @@ pub fn geom(a: Activity, st: &AppState) -> Option<Geom> {
         Activity::Media => return None,
         Activity::Timer if long_countdown(st) => TIMER_LONG_W,
         Activity::Timer => TIMER_W,
+        Activity::WorkTimer => 126.0,
         Activity::MediaTimer => MEDIA_TIMER_W,
         Activity::Prayer => prayer_w(st),
         Activity::Game => game_w(st),
@@ -91,6 +92,7 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, a: Activity, body: Rect) -> bool {
     match a {
         Activity::Media => return false,
         Activity::Timer => draw_timer(ui, st, body),
+        Activity::WorkTimer => draw_work_timer(ui, st, body),
         Activity::MediaTimer => draw_media_timer(ui, st, body),
         Activity::Prayer => draw_prayer(ui, st, body),
         Activity::Game => draw_game(ui, st, body),
@@ -172,6 +174,15 @@ fn draw_timer(ui: &mut Ui, st: &AppState, body: Rect) {
     let text = fmt_countdown(p.remaining(st.now));
     let right = body.right() - DIGITS_RIGHT;
     ui.c.text(&text, Rect::new(right - 80.0, body.y, 80.0, body.h), &digits(paused).right());
+}
+
+fn draw_work_timer(ui: &mut Ui, st: &AppState, body: Rect) {
+    let Some(t) = st.store.time_tracker.timers.iter().find(|t| t.running()) else { return };
+    let c = Point::new(body.x + GLYPH_INSET + RING_D / 2.0, body.center().y);
+    ui.c.ring(c, (RING_D - RING_STROKE) / 2.0, RING_STROKE, 1.0, RING_TRACK, st.accent);
+    ui.c.icon(Icon::Timer, Rect::from_center(c, 9.0, 9.0), st.accent);
+    let text = fmt_duration(t.seconds(st.unix) as f64);
+    ui.c.text(&text, Rect::new(body.x + 38.0, body.y, body.w - 52.0, body.h), &TextStyle::new(15.0).weight(Weight::Semibold).tabular().color(INK).right());
 }
 
 /// Album art in the left end cap (or a note on a grey tile), dimmed while

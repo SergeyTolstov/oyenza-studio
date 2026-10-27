@@ -23,6 +23,8 @@ use poni_core::sysmon::fmt_pct;
 pub enum Activity {
     Media,
     Timer,
+    /// A manually started task stopwatch from the Time page.
+    WorkTimer,
     MediaTimer,
     /// Prayer times: the minutes before the next prayer.
     Prayer,
@@ -93,6 +95,7 @@ pub fn content_key(m: &Mode) -> u32 {
         Mode::Idle => 1,
         Mode::Activity(Activity::Media) => 2,
         Mode::Activity(Activity::Timer) => 3,
+        Mode::Activity(Activity::WorkTimer) => 7,
         Mode::Activity(Activity::MediaTimer) => 4,
         Mode::Activity(Activity::Prayer) => 5,
         Mode::Activity(Activity::Game) => 6,
@@ -139,6 +142,12 @@ pub fn current_activity(st: &AppState) -> Option<Activity> {
     // Over a game the readout takes the pill; music and timer wait.
     if st.game.active {
         return Some(Activity::Game);
+    }
+    let work_timer = st.store.time_tracker.timers.iter().any(|t| t.running());
+    // Focus is the primary timer; a manually started task timer otherwise
+    // takes the closed island so elapsed work stays visible.
+    if !st.pomodoro.is_active() && work_timer {
+        return Some(Activity::WorkTimer);
     }
     let media = st.settings.show_media_activity
         && st.media.as_ref().is_some_and(|m| m.is_playing() || media_grace_end(st).is_some_and(|end| st.now < end));
@@ -242,6 +251,7 @@ pub fn geom(m: &Mode, st: &AppState) -> Geom {
             let long = fmt_countdown(st.pomodoro.remaining(st.now)).len() > 5;
             Geom::new(if long { 112.0 } else { 96.0 }, 32.0, 15.0)
         }
+        Mode::Activity(Activity::WorkTimer) => Geom::new(126.0, 32.0, 15.0),
         Mode::Activity(Activity::MediaTimer) => Geom::new(132.0, 32.0, 15.0),
         Mode::Activity(Activity::Prayer) => Geom::new(PRAYER_W, 32.0, 15.0),
         Mode::Activity(Activity::Game) => Geom::new(if game_temp(st).is_some() { GAME_W } else { GAME_NO_TEMP_W }, 32.0, 15.0),
@@ -310,6 +320,9 @@ pub fn next_wake(m: &Mode, st: &AppState) -> Option<f64> {
         if let Some(t) = crate::pill::lyric::next_wake(st) {
             consider(t);
         }
+    }
+    if *m == Mode::Activity(Activity::WorkTimer) {
+        consider(now + 1.0);
     }
     if let Some(t) = crate::pill::next_wake(m, st) {
         consider(t);
@@ -551,6 +564,14 @@ fn draw_activity(ui: &mut Ui, st: &mut AppState, a: Activity, body: Rect) {
             }
             let text = fmt_countdown(p.remaining(st.now));
             ui.c.text(&text, Rect::new(body.x + 40.0, body.y, 64.0, body.h), &countdown_style(col, paused));
+        }
+        Activity::WorkTimer => {
+            let Some(t) = st.store.time_tracker.timers.iter().find(|t| t.running()) else { return };
+            let c = Point::new(body.x + 21.0, cy);
+            ui.c.ring(c, 9.0, 2.4, 1.0, RING_TRACK, st.accent);
+            ui.c.icon(Icon::Timer, Rect::from_center(c, 10.0, 10.0), st.accent);
+            let text = poni_core::datetime::fmt_duration(t.seconds(st.unix) as f64);
+            ui.c.text(&text, Rect::new(body.x + 40.0, body.y, body.w - 52.0, body.h), &TextStyle::body().weight(Weight::Semibold).tabular().color(st.accent).right());
         }
         Activity::Prayer => {
             // No Oyen here, in any theme: the moon and the minutes only.

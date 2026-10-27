@@ -115,8 +115,8 @@ impl PageKind {
     }
 
     pub fn from_key(s: &str) -> PageKind {
-        // Health took the Water page's place in the tab row.
-        let s = if s.trim().eq_ignore_ascii_case("water") { "health" } else { s.trim() };
+        // Removed pages and the old Water page open the first page instead.
+        let s = if matches!(s.trim().to_ascii_lowercase().as_str(), "water" | "health" | "addons") { "media" } else { s.trim() };
         Self::ALL.into_iter().find(|p| p.key().eq_ignore_ascii_case(s)).unwrap_or(PageKind::Media)
     }
 
@@ -184,12 +184,15 @@ pub fn tabs(st: &AppState) -> Vec<PageKind> {
     PageKind::ALL
         .into_iter()
         .filter(|p| match p {
+            // Health and Add-ons are no longer part of the product UI. Their
+            // data types remain for a compatible upgrade path.
+            PageKind::Health | PageKind::Addons => false,
             PageKind::Apps => cfg!(windows),
             PageKind::TimeTracker => cfg!(windows),
             PageKind::Oyenza => st.oyenza.tab_visible(),
             PageKind::Prayer => st.prayer_on(),
             PageKind::Script => st.script_on(),
-            PageKind::Clipboard => st.settings.clipboard_history,
+            PageKind::Clipboard => true,
             p => p.tabbed(),
         })
         .collect()

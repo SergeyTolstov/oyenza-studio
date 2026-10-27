@@ -47,7 +47,7 @@ pub enum MonitorChoice {
 }
 
 /// Bumped when defaults change in a way existing files should pick up.
-pub const SETTINGS_VERSION: u32 = 4;
+pub const SETTINGS_VERSION: u32 = 5;
 
 fn version_zero() -> u32 {
     0
@@ -178,7 +178,7 @@ impl Default for Settings {
             hud_volume: true,
             hud_power: true,
             hud_bluetooth: true,
-            clipboard_history: false,
+            clipboard_history: true,
             sounds: true,
             start_page: "media".into(),
             remember_page: true,
@@ -256,6 +256,10 @@ impl Settings {
             if self.start_page == "clipboard" {
                 self.start_page = "media".into();
             }
+        }
+        // v5: Clipboard is a standard page again; the Add-ons page is gone.
+        if self.settings_version < 5 {
+            self.clipboard_history = true;
         }
         self.settings_version = self.settings_version.max(SETTINGS_VERSION);
         // Step aside is no longer offered: the island stays over maximized windows.
@@ -367,12 +371,13 @@ mod tests {
     }
 
     #[test]
-    fn clipboard_history_goes_off_once_and_lives_in_add_ons() {
-        assert!(!Settings::default().clipboard_history);
-        // Every file from before 0.2.7 had it on: off once, and a Clipboard start page opens Music.
+    fn clipboard_history_is_standard_from_v5() {
+        assert!(Settings::default().clipboard_history);
+        // The earlier one-time off migration still handles v3 before v5 turns
+        // Clipboard back on as the standard page.
         let s = serde_json::from_str::<Settings>(r#"{"settings_version":3,"clipboard_history":true,"start_page":"clipboard"}"#).unwrap().sanitized();
-        assert_eq!((s.clipboard_history, s.start_page.as_str(), s.settings_version), (false, "media", SETTINGS_VERSION));
-        // Switched back on afterwards, it stays on.
+        assert_eq!((s.clipboard_history, s.start_page.as_str(), s.settings_version), (true, "media", SETTINGS_VERSION));
+        // A v4 user is migrated to the new standard.
         let s = serde_json::from_str::<Settings>(r#"{"settings_version":4,"clipboard_history":true}"#).unwrap().sanitized();
         assert!(s.clipboard_history);
         // The Add-ons switch and the tray's item are the same switch.

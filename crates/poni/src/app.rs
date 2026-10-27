@@ -2836,10 +2836,10 @@ impl App {
         }
         let dt = dt.clamp(0.0, 0.05) as f32;
         // Today's tiles need the readings only while they show (signed out it has the sign-in card, signed in the day).
-        self.set_stats(self.mode == Mode::Expanded(PageKind::Today) && pages::today::shows_tiles(&self.st));
+        self.set_stats(false);
         self.set_sysmon(self.mode == Mode::Expanded(PageKind::System));
         self.set_oyenza_watch(self.mode == Mode::Expanded(PageKind::Oyenza));
-        self.set_today_watch(self.mode == Mode::Expanded(PageKind::Today));
+        self.set_today_watch(false);
         // The Pill theme floats the island below the top edge.
         self.island.set_floating(pill::on(self.st.settings.theme).then_some(pill::TOP_GAP));
         self.island.step(dt, now);
@@ -3548,7 +3548,7 @@ impl App {
             } else {
                 crate::autostart::report(self.sink.clone(), None);
             }
-            self.set_stats(p == PageKind::Today && self.expanded);
+            self.set_stats(false);
             self.set_sysmon(p == PageKind::System && self.expanded);
             if self.text_focus {
                 self.blur_text();

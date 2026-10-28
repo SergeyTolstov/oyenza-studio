@@ -52,5 +52,3 @@ fn visit(dir: &Path, out: &mut BTreeMap<String, LaunchApp>) {
         }
     }
 }
-
-

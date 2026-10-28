@@ -25,6 +25,8 @@ pub enum Activity {
     Timer,
     /// A manually started task stopwatch from the Time page.
     WorkTimer,
+    /// The nearest scheduled work item, when no timer is actively running.
+    NextWork,
     MediaTimer,
     /// Prayer times: the minutes before the next prayer.
     Prayer,
@@ -96,6 +98,7 @@ pub fn content_key(m: &Mode) -> u32 {
         Mode::Activity(Activity::Media) => 2,
         Mode::Activity(Activity::Timer) => 3,
         Mode::Activity(Activity::WorkTimer) => 7,
+        Mode::Activity(Activity::NextWork) => 8,
         Mode::Activity(Activity::MediaTimer) => 4,
         Mode::Activity(Activity::Prayer) => 5,
         Mode::Activity(Activity::Game) => 6,
@@ -149,9 +152,12 @@ pub fn current_activity(st: &AppState) -> Option<Activity> {
     if !st.pomodoro.is_active() && work_timer {
         return Some(Activity::WorkTimer);
     }
+    let timer = st.pomodoro.is_active();
+    if !timer && st.store.time_tracker.next_planned(st.unix).is_some() {
+        return Some(Activity::NextWork);
+    }
     let media = st.settings.show_media_activity
         && st.media.as_ref().is_some_and(|m| m.is_playing() || media_grace_end(st).is_some_and(|end| st.now < end));
-    let timer = st.pomodoro.is_active();
     match (media, timer) {
         (true, true) => Some(Activity::MediaTimer),
         (true, false) => Some(Activity::Media),
@@ -252,6 +258,7 @@ pub fn geom(m: &Mode, st: &AppState) -> Geom {
             Geom::new(if long { 112.0 } else { 96.0 }, 32.0, 15.0)
         }
         Mode::Activity(Activity::WorkTimer) => Geom::new(126.0, 32.0, 15.0),
+        Mode::Activity(Activity::NextWork) => Geom::new(286.0, 32.0, 15.0),
         Mode::Activity(Activity::MediaTimer) => Geom::new(132.0, 32.0, 15.0),
         Mode::Activity(Activity::Prayer) => Geom::new(PRAYER_W, 32.0, 15.0),
         Mode::Activity(Activity::Game) => Geom::new(if game_temp(st).is_some() { GAME_W } else { GAME_NO_TEMP_W }, 32.0, 15.0),
@@ -323,6 +330,11 @@ pub fn next_wake(m: &Mode, st: &AppState) -> Option<f64> {
     }
     if *m == Mode::Activity(Activity::WorkTimer) {
         consider(now + 1.0);
+    }
+    if *m == Mode::Activity(Activity::NextWork) {
+        // The label is deliberately minute-granular, so a once-a-minute
+        // wake keeps the resting island calm while the countdown stays true.
+        consider(now + 60.0);
     }
     if let Some(t) = crate::pill::next_wake(m, st) {
         consider(t);
@@ -572,6 +584,20 @@ fn draw_activity(ui: &mut Ui, st: &mut AppState, a: Activity, body: Rect) {
             ui.c.icon(Icon::Timer, Rect::from_center(c, 10.0, 10.0), st.accent);
             let text = poni_core::datetime::fmt_duration(t.seconds(st.unix) as f64);
             ui.c.text(&text, Rect::new(body.x + 40.0, body.y, body.w - 52.0, body.h), &TextStyle::body().weight(Weight::Semibold).tabular().color(st.accent).right());
+        }
+        Activity::NextWork => {
+            let Some(timer) = st.store.time_tracker.next_planned(st.unix) else { return };
+            let at = timer.planned_unix.unwrap_or(st.unix);
+            let left = at.saturating_sub(st.unix);
+            let minutes = ((left + 59) / 60).max(1);
+            let countdown = if minutes >= 60 {
+                format!("in {}h {:02}m", minutes / 60, minutes % 60)
+            } else {
+                format!("in {minutes}m")
+            };
+            ui.c.icon(Icon::Calendar, Rect::new(body.x + 13.0, cy - 8.0, 16.0, 16.0), st.accent);
+            ui.c.text(&timer.comment, Rect::new(body.x + 38.0, body.y, body.w - 118.0, body.h), &TextStyle::body().color(palette::TEXT));
+            ui.c.text(&countdown, Rect::new(body.right() - 78.0, body.y, 66.0, body.h), &TextStyle::footnote().color(st.accent).right().tabular());
         }
         Activity::Prayer => {
             // No Oyen here, in any theme: the moon and the minutes only.

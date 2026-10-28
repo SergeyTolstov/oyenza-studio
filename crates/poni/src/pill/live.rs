@@ -78,6 +78,8 @@ fn capsule(w: f32) -> Geom {
 pub fn geom(a: Activity, st: &AppState) -> Option<Geom> {
     let w = match a {
         Activity::Media => return None,
+        // The work-plan preview uses Classic's compact text layout.
+        Activity::NextWork => return None,
         Activity::Timer if long_countdown(st) => TIMER_LONG_W,
         Activity::Timer => TIMER_W,
         Activity::WorkTimer => 126.0,
@@ -91,6 +93,7 @@ pub fn geom(a: Activity, st: &AppState) -> Option<Geom> {
 pub fn draw(ui: &mut Ui, st: &mut AppState, a: Activity, body: Rect) -> bool {
     match a {
         Activity::Media => return false,
+        Activity::NextWork => return false,
         Activity::Timer => draw_timer(ui, st, body),
         Activity::WorkTimer => draw_work_timer(ui, st, body),
         Activity::MediaTimer => draw_media_timer(ui, st, body),

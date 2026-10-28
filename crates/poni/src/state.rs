@@ -284,6 +284,8 @@ pub struct PageUiState {
     pub time_editing: Option<u64>,
     /// Scroll offset of the planned-work timer list.
     pub time_timer_scroll: f32,
+    /// A small, headerless Time input opened by the global quick-add shortcut.
+    pub quick_add: bool,
     pub task_input: String,
     pub task_scroll: f32,
     pub clip_scroll: f32,

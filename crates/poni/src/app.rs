@@ -67,6 +67,8 @@ const DROP_PEEK_EVERY_S: f64 = 30.0;
 const HOTKEY_PEEK: i32 = 1;
 /// Alt+Shift+S pauses and resumes the Script page's reading from any app.
 const HOTKEY_SCRIPT: i32 = 2;
+/// Alt+Shift+Space opens the tiny paused-work planner from any app.
+const HOTKEY_QUICK_ADD: i32 = 3;
 /// Raises that follow a new foreground window, and their spacing.
 const RAISE_REPEATS: u8 = 4;
 const RAISE_INTERVAL_MS: u32 = 500;
@@ -384,6 +386,7 @@ pub struct App {
     peek_hotkey: bool,
     /// Alt+Shift+S is registered (only while the Script page can read).
     script_hotkey: bool,
+    quick_add_hotkey: bool,
     /// The Script page has asked for the island to stay out of screen capture.
     script_excluded: bool,
     /// A reading held the island open at the last tick.
@@ -576,6 +579,7 @@ impl App {
             game_hidden: false,
             peek_hotkey: false,
             script_hotkey: false,
+            quick_add_hotkey: false,
             script_excluded: false,
             script_held: false,
             script_shown: false,
@@ -644,6 +648,7 @@ impl App {
             self.st.cmds.push(Command::LoadThumb(p));
         }
         self.schedule_minute_timer();
+        self.set_quick_add_hotkey(!fake);
         if let Some(t) = self.selftest.as_mut() {
             t.begin(&mut self.st);
             unsafe { SetTimer(self.hwnd, TIMER_SELFTEST, 50, None) };
@@ -657,6 +662,7 @@ impl App {
         self.frames = None;
         self.set_peek_hotkey(false);
         self.set_script_hotkey(false);
+        self.set_quick_add_hotkey(false);
         self.glass.stop(self.hwnd, &mut self.gfx);
         if let Some(p) = self.phone.take() {
             p.stop();
@@ -1177,6 +1183,10 @@ impl App {
                 self.st.now = clock::mono();
                 pages::script::toggle(&mut self.st);
                 self.request_frame();
+                Some(LRESULT(0))
+            }
+            WM_HOTKEY if wp.0 == HOTKEY_QUICK_ADD as usize => {
+                self.open_quick_add();
                 Some(LRESULT(0))
             }
             WM_QUERYENDSESSION => Some(LRESULT(1)),
@@ -2110,6 +2120,7 @@ impl App {
     fn collapse(&mut self) {
         if self.expanded {
             self.expanded = false;
+            self.st.ui.quick_add = false;
             if self.text_focus {
                 self.blur_text();
             }
@@ -2362,6 +2373,34 @@ impl App {
                 self.script_hotkey = false;
             }
         }
+    }
+
+    fn set_quick_add_hotkey(&mut self, on: bool) {
+        if on == self.quick_add_hotkey {
+            return;
+        }
+        unsafe {
+            if on {
+                match RegisterHotKey(self.helper, HOTKEY_QUICK_ADD, MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, u32::from(VK_SPACE.0)) {
+                    Ok(()) => self.quick_add_hotkey = true,
+                    Err(e) => pwarn!("quick add: Alt+Shift+Space is taken ({e})"),
+                }
+            } else {
+                let _ = UnregisterHotKey(self.helper, HOTKEY_QUICK_ADD);
+                self.quick_add_hotkey = false;
+            }
+        }
+    }
+
+    fn open_quick_add(&mut self) {
+        self.set_page(PageKind::TimeTracker);
+        self.st.ui.quick_add = true;
+        self.st.ui.time_editing = None;
+        self.st.ui.timer_comment.clear();
+        self.expand();
+        self.input.focused = Some(wid("time.quick"));
+        self.focus_text();
+        self.request_frame();
     }
 
     /// The Script page: a reading pauses while its page isn't on screen, the
@@ -3574,6 +3613,7 @@ impl App {
 
     fn set_page(&mut self, p: PageKind) {
         if p != self.st.page {
+            self.st.ui.quick_add = false;
             self.st.page = p;
             // Settings is never where the island opens next time.
             if p != PageKind::Settings {

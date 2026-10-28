@@ -276,6 +276,13 @@ const TABS_END: f32 = 0.6;
 /// one fades in; the old page is drawn without input (it can't be clicked).
 /// `body` is the island at its final size, so nothing reflows while it opens.
 pub fn draw_expanded(ui: &mut Ui, st: &mut AppState, body: Rect, page: PageKind, transition: Option<PageTransition>) {
+    if page == PageKind::TimeTracker && st.ui.quick_add {
+        let quick = Rect::new(body.x + PAD, body.y + PAD - 2.0, body.w - 2.0 * PAD, 38.0);
+        ui.c.clip(body);
+        time_tracker::draw_quick(ui, st, quick);
+        ui.c.unclip();
+        return;
+    }
     if crate::pill::expanded::draw(ui, st, body, page, transition) {
         return;
     }

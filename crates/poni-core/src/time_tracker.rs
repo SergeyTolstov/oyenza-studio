@@ -14,6 +14,12 @@ pub struct TimeTracker {
     /// Manually started work timers, saved with their purpose.
     pub timers: Vec<TaskTimer>,
     pub next_timer_id: u64,
+    /// Completed work for one local calendar day. The day key keeps the
+    /// compact history honest when the app stays open across midnight.
+    #[serde(default)]
+    pub history_day: String,
+    #[serde(default)]
+    pub history: Vec<CompletedTimer>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -30,6 +36,15 @@ pub struct TaskTimer {
     /// Bit set for each advance reminder already shown (60, 30, 5, 1 min).
     #[serde(default)]
     pub reminder_mask: u8,
+}
+
+/// A finished work timer retained for the current local day.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CompletedTimer {
+    pub id: u64,
+    pub comment: String,
+    pub elapsed: u64,
+    pub finished_at: i64,
 }
 
 impl TaskTimer {
@@ -69,6 +84,38 @@ impl TimeTracker {
         let id = self.next_timer_id.max(1);
         self.next_timer_id = id.saturating_add(1);
         self.timers.push(TaskTimer { id, comment: comment.to_string(), elapsed: 0, started_at: None, planned_unix, reminder_mask: 0 });
+    }
+
+    /// Move a work item out of the plan and into today's completed history.
+    /// A running timer is paused first so its final seconds are preserved.
+    pub fn finish_timer(&mut self, id: u64, now: i64, day: String) -> bool {
+        let Some(index) = self.timers.iter().position(|timer| timer.id == id) else { return false };
+        let mut timer = self.timers.remove(index);
+        timer.pause(now);
+        if self.history_day != day {
+            self.history_day = day;
+            self.history.clear();
+        }
+        self.history.push(CompletedTimer {
+            id: timer.id,
+            comment: timer.comment,
+            elapsed: timer.elapsed,
+            finished_at: now,
+        });
+        // Keep the day view short and useful even after a busy day.
+        if self.history.len() > 48 {
+            self.history.drain(..self.history.len() - 48);
+        }
+        true
+    }
+
+    /// The closest future plan that is not currently running.
+    pub fn next_planned(&self, now: i64) -> Option<&TaskTimer> {
+        self.timers.iter()
+            .filter(|timer| !timer.running())
+            .filter_map(|timer| timer.planned_unix.filter(|at| *at > now).map(|at| (at, timer)))
+            .min_by_key(|(at, _)| *at)
+            .map(|(_, timer)| timer)
     }
 
     /// The next planned, not-yet-started task reminder due at `now`.
@@ -141,6 +188,28 @@ mod tests {
         assert_eq!(lead, 300, "late wake chooses the current milestone");
         assert!(tracker.mark_reminder_shown(id, lead));
         assert_eq!(tracker.due_reminder(9_700).map(|(_, lead, _)| lead), None, "older notices are not replayed");
+    }
+
+    #[test]
+    fn finished_timer_moves_to_todays_history() {
+        let mut tracker = TimeTracker::default();
+        tracker.plan_timer("Write brief".into(), None);
+        tracker.timers[0].resume(1_000);
+        assert!(tracker.finish_timer(1, 1_125, "2026-10-28".into()));
+        assert!(tracker.timers.is_empty());
+        assert_eq!(tracker.history_day, "2026-10-28");
+        assert_eq!(tracker.history[0].comment, "Write brief");
+        assert_eq!(tracker.history[0].elapsed, 125);
+    }
+
+    #[test]
+    fn next_planned_ignores_past_and_running_items() {
+        let mut tracker = TimeTracker::default();
+        tracker.plan_timer("Past".into(), Some(90));
+        tracker.plan_timer("Soon".into(), Some(150));
+        tracker.plan_timer("Later".into(), Some(200));
+        tracker.timers[1].resume(100);
+        assert_eq!(tracker.next_planned(100).map(|timer| timer.comment.as_str()), Some("Later"));
     }
 }
 

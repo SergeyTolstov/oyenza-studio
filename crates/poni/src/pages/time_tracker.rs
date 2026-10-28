@@ -7,15 +7,31 @@ use crate::ui::{wid, wid_n, Ui, PillStyle, PILL_SMALL};
 use poni_core::datetime::{civil_from_days, days_from_civil, days_in_month, fmt_duration};
 use poni_core::geom::{palette, Rect};
 
-const HEIGHT: f32 = 448.0;
+const HEIGHT: f32 = 532.0;
 const DATE_Y: f32 = 104.0;
 const PLAN_TITLE_Y: f32 = 142.0;
 const PLAN_TOP: f32 = 164.0;
-const PLAN_H: f32 = 166.0;
+const PLAN_H: f32 = 244.0;
 const PLAN_ROW_H: f32 = 34.0;
 const WHEEL_STEP: f32 = PLAN_ROW_H * 1.5;
 
-pub fn height(_st: &AppState) -> f32 { HEIGHT }
+pub fn height(st: &AppState) -> f32 { if st.ui.quick_add { 56.0 } else { HEIGHT } }
+
+/// Compact overlay used by Alt+Shift+Space. It deliberately creates a paused
+/// plan item: writing work down should never start timing by accident.
+pub fn draw_quick(ui: &mut Ui, st: &mut AppState, area: Rect) {
+    ui.c.icon(Icon::Plus, Rect::new(area.x, area.y + 8.0, 18.0, 18.0), st.accent);
+    let input = Rect::new(area.x + 26.0, area.y, area.w - 104.0, 34.0);
+    let response = ui.text_input_row(wid("time.quick"), input, &mut st.ui.timer_comment, "Add work to plan", 120, st.accent, None);
+    let add = ui.pill(wid("time.quick.add"), Rect::new(area.right() - 70.0, area.y, 70.0, PILL_SMALL), "Add", Some(Icon::Check), PillStyle::Primary(st.accent)).clicked;
+    if (response.submitted || add) && !st.ui.timer_comment.trim().is_empty() {
+        st.store.time_tracker.plan_timer(st.ui.timer_comment.trim().to_string(), None);
+        st.ui.timer_comment.clear();
+        st.ui.quick_add = false;
+        st.save();
+        st.cmd(Command::Collapse);
+    }
+}
 
 fn clear_editor(st: &mut AppState) {
     st.ui.time_editing = None;
@@ -164,11 +180,14 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
     } else if (add.submitted || date.submitted || save) && !st.ui.timer_comment.trim().is_empty() {
         save_plan(st);
     }
+    let current_day = st.local.day_key();
+    let history = (st.store.time_tracker.history_day == current_day).then(|| st.store.time_tracker.history.clone()).unwrap_or_default();
     let title = format!("Work plan ({})", st.store.time_tracker.timers.len());
     ui.c.text(&title, Rect::new(area.x, area.y + PLAN_TITLE_Y, area.w, 18.0), &TextStyle::caption().color(palette::TEXT_FAINT));
     let view = Rect::new(area.x, area.y + PLAN_TOP, area.w, PLAN_H);
     let timers = st.store.time_tracker.timers.clone();
-    let max_scroll = (timers.len() as f32 * PLAN_ROW_H - view.h).max(0.0);
+    let list_rows = timers.len() + if history.is_empty() { 0 } else { history.len() + 1 };
+    let max_scroll = (list_rows as f32 * PLAN_ROW_H - view.h).max(0.0);
     if max_scroll > 0.0 {
         st.ui.time_timer_scroll -= ui.wheel_in(view) * WHEEL_STEP;
     }
@@ -177,31 +196,56 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
         super::empty_state(ui, view, Icon::Timer, "Your work plan is empty", "Add work above; start its timer when you begin");
     }
     ui.c.clip(view);
-    for (i, timer) in timers.iter().rev().enumerate() {
-        let row = Rect::new(area.x, view.y + i as f32 * PLAN_ROW_H - st.ui.time_timer_scroll, area.w, PLAN_ROW_H);
+    let mut row_index = 0usize;
+    for timer in timers.iter().rev() {
+        let row = Rect::new(area.x, view.y + row_index as f32 * PLAN_ROW_H - st.ui.time_timer_scroll, area.w, PLAN_ROW_H);
+        row_index += 1;
         if row.bottom() <= view.y || row.y >= view.bottom() { continue; }
         let running = timer.running();
         ui.c.icon(Icon::Timer, Rect::new(row.x + 4.0, row.y + 6.0, 18.0, 18.0), if running { st.accent } else { palette::TEXT_DIM });
         let text_style = TextStyle::body();
-        let text_r = Rect::new(row.x + 29.0, row.y, (row.w - 340.0).max(40.0), row.h);
+        let text_r = Rect::new(row.x + 29.0, row.y, (row.w - 390.0).max(40.0), row.h);
         let shown = fit_text(ui, &timer.comment, &text_style, text_r.w);
         ui.c.text(&shown, text_r, &text_style);
         if let Some(at) = timer.planned_unix {
-            ui.c.text(&planned_label(st, at), Rect::new(row.right() - 276.0, row.y, 98.0, row.h), &TextStyle::footnote().color(palette::TEXT_FAINT).right());
+            ui.c.text(&planned_label(st, at), Rect::new(row.right() - 322.0, row.y, 96.0, row.h), &TextStyle::footnote().color(palette::TEXT_FAINT).right());
         }
-        ui.c.text(&fmt_duration(timer.seconds(st.unix) as f64), Rect::new(row.right() - 170.0, row.y, 62.0, row.h), &TextStyle::body().color(if running { st.accent } else { palette::TEXT_DIM }).right().tabular());
-        if ui.icon_button(wid_n("time.play", timer.id), Rect::new(row.right() - 102.0, row.y + 3.0, 24.0, 24.0), if running { Icon::Pause } else { Icon::Play }, st.accent, 13.0).clicked {
+        ui.c.text(&fmt_duration(timer.seconds(st.unix) as f64), Rect::new(row.right() - 220.0, row.y, 60.0, row.h), &TextStyle::body().color(if running { st.accent } else { palette::TEXT_DIM }).right().tabular());
+        if ui.icon_button(wid_n("time.play", timer.id), Rect::new(row.right() - 154.0, row.y + 3.0, 24.0, 24.0), if running { Icon::Pause } else { Icon::Play }, st.accent, 13.0).clicked {
             if let Some(t) = st.store.time_tracker.timers.iter_mut().find(|t| t.id == timer.id) { if running { t.pause(st.unix); } else { t.resume(st.unix); } }
             st.save();
         }
-        if ui.pill(wid_n("time.edit", timer.id), Rect::new(row.right() - 74.0, row.y + 3.0, 48.0, PILL_SMALL), "Edit", None, PillStyle::Utility).clicked {
+        if ui.pill(wid_n("time.edit", timer.id), Rect::new(row.right() - 126.0, row.y + 3.0, 44.0, PILL_SMALL), "Edit", None, PillStyle::Utility).clicked {
             st.ui.time_editing = Some(timer.id);
             st.ui.timer_comment = timer.comment.clone();
             st.ui.time_plan_date = timer.planned_unix.map(|at| planned_input(st, at)).unwrap_or_default();
         }
+        if ui.pill(wid_n("time.finish", timer.id), Rect::new(row.right() - 78.0, row.y + 3.0, 52.0, PILL_SMALL), "Finish", Some(Icon::Check), PillStyle::Primary(st.accent)).clicked {
+            st.store.time_tracker.finish_timer(timer.id, st.unix, current_day.clone());
+            st.save();
+        }
         if ui.icon_button(wid_n("time.delete", timer.id), Rect::new(row.right() - 22.0, row.y + 3.0, 20.0, 24.0), Icon::Trash, palette::TEXT_DIM, 12.0).clicked {
             st.store.time_tracker.timers.retain(|t| t.id != timer.id);
             st.save();
+        }
+    }
+    if !history.is_empty() {
+        let label = Rect::new(area.x, view.y + row_index as f32 * PLAN_ROW_H - st.ui.time_timer_scroll, area.w, PLAN_ROW_H);
+        row_index += 1;
+        if label.bottom() > view.y && label.y < view.bottom() {
+            ui.c.text(&format!("Today — completed ({})", history.len()), Rect::new(label.x + 4.0, label.y, label.w, label.h), &TextStyle::caption().color(palette::TEXT_FAINT));
+        }
+        for timer in history.iter().rev() {
+            let row = Rect::new(area.x, view.y + row_index as f32 * PLAN_ROW_H - st.ui.time_timer_scroll, area.w, PLAN_ROW_H);
+            row_index += 1;
+            if row.bottom() <= view.y || row.y >= view.bottom() { continue; }
+            ui.c.icon(Icon::Check, Rect::new(row.x + 4.0, row.y + 6.0, 18.0, 18.0), palette::GREEN);
+            let text_style = TextStyle::body().color(palette::TEXT_DIM);
+            let text_r = Rect::new(row.x + 29.0, row.y, row.w - 170.0, row.h);
+            let shown = fit_text(ui, &timer.comment, &text_style, text_r.w);
+            ui.c.text(&shown, text_r, &text_style);
+            ui.c.text(&fmt_duration(timer.elapsed as f64), Rect::new(row.right() - 126.0, row.y, 62.0, row.h), &TextStyle::body().color(palette::GREEN).right().tabular());
+            ui.c.text("Done", Rect::new(row.right() - 54.0, row.y, 54.0, row.h), &TextStyle::footnote().color(palette::TEXT_FAINT).right());
         }
     }
     ui.c.unclip();

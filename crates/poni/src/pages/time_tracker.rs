@@ -7,10 +7,7 @@ use crate::ui::{wid, wid_n, Ui, PillStyle, PILL_SMALL};
 use poni_core::datetime::{civil_from_days, days_from_civil, days_in_month, fmt_duration};
 use poni_core::geom::{palette, Rect};
 
-const HEIGHT: f32 = 532.0;
-const DATE_Y: f32 = 104.0;
-const PLAN_TITLE_Y: f32 = 142.0;
-const PLAN_TOP: f32 = 164.0;
+const HEIGHT: f32 = 456.0;
 const PLAN_H: f32 = 244.0;
 const PLAN_ROW_H: f32 = 34.0;
 const WHEEL_STEP: f32 = PLAN_ROW_H * 1.5;
@@ -156,20 +153,10 @@ pub fn next_wake(st: &AppState) -> Option<f64> {
 }
 
 pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
-    let enabled = st.settings.time_tracker;
-    let label = if enabled { "Tracking is on" } else { "Start tracking" };
-    if ui.pill(wid("time.toggle"), Rect::new(area.x, area.y, 160.0, PILL_SMALL), label, Some(if enabled { Icon::Pause } else { Icon::Play }), if enabled { PillStyle::Primary(st.accent) } else { PillStyle::Neutral }).clicked {
-        st.settings.time_tracker = !enabled;
-        if !enabled { st.store.time_tracker.observe(st.local.day_key(), st.unix, None); }
-        st.cmd(Command::SaveSettings);
-        st.save();
-    }
-    let note = if enabled { "Only the foreground app name is kept on this PC." } else { "Off: Oyenza Studio does not record app time." };
-    ui.c.text(note, Rect::new(area.x, area.y + 38.0, area.w, 18.0), &TextStyle::footnote().color(palette::TEXT_DIM));
     let editing = st.ui.time_editing.is_some();
-    let input = Rect::new(area.x, area.y + 64.0, area.w, 34.0);
+    let input = Rect::new(area.x, area.y, area.w, 34.0);
     let add = ui.text_input_row(wid("time.comment"), input, &mut st.ui.timer_comment, if editing { "Edit work item" } else { "Add to work plan — start it when you begin" }, 120, st.accent, Some(if editing { Icon::Sliders } else { Icon::Plus }));
-    let date_r = Rect::new(area.x, area.y + DATE_Y, area.w - 112.0, PILL_SMALL);
+    let date_r = Rect::new(area.x, area.y + 40.0, area.w - 112.0, PILL_SMALL);
     let date = ui.text_input_row(wid("time.date"), date_r, &mut st.ui.time_plan_date, "Planned: 28.10 14:30", 20, st.accent, Some(Icon::Calendar));
     let save_r = Rect::new(date_r.right() + 8.0, date_r.y, 76.0, PILL_SMALL);
     let save = ui.pill(wid("time.plan.save"), save_r, if editing { "Save" } else { "Add" }, Some(Icon::Check), PillStyle::Primary(st.accent)).clicked;
@@ -183,8 +170,8 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
     let current_day = st.local.day_key();
     let history = (st.store.time_tracker.history_day == current_day).then(|| st.store.time_tracker.history.clone()).unwrap_or_default();
     let title = format!("Work plan ({})", st.store.time_tracker.timers.len());
-    ui.c.text(&title, Rect::new(area.x, area.y + PLAN_TITLE_Y, area.w, 18.0), &TextStyle::caption().color(palette::TEXT_FAINT));
-    let view = Rect::new(area.x, area.y + PLAN_TOP, area.w, PLAN_H);
+    ui.c.text(&title, Rect::new(area.x, area.y + 78.0, area.w, 18.0), &TextStyle::caption().color(palette::TEXT_FAINT));
+    let view = Rect::new(area.x, area.y + 100.0, area.w, PLAN_H);
     let timers = st.store.time_tracker.timers.clone();
     let list_rows = timers.len() + if history.is_empty() { 0 } else { history.len() + 1 };
     let max_scroll = (list_rows as f32 * PLAN_ROW_H - view.h).max(0.0);
@@ -249,18 +236,4 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
         }
     }
     ui.c.unclip();
-    let y = area.y + PLAN_TOP + PLAN_H + 14.0;
-    ui.c.text("Automatic app time", Rect::new(area.x, y, area.w, 18.0), &TextStyle::caption().color(palette::TEXT_FAINT));
-    let y = y + 24.0;
-    let mut apps: Vec<_> = st.store.time_tracker.apps.iter().collect();
-    apps.sort_by_key(|(_, s)| std::cmp::Reverse(**s));
-    if apps.is_empty() {
-        super::empty_state(ui, Rect::new(area.x, y, area.w, HEIGHT - (y - area.y)), Icon::App, "No automatic time yet", "Keep an app active for a minute");
-        return;
-    }
-    for (i, (name, secs)) in apps.into_iter().take(3).enumerate() {
-        let row_y = y + i as f32 * 28.0;
-        ui.c.text(name, Rect::new(area.x + 8.0, row_y, area.w - 120.0, 24.0), &TextStyle::body());
-        ui.c.text(&fmt_duration(*secs as f64), Rect::new(area.right() - 100.0, row_y, 100.0, 24.0), &TextStyle::body().color(st.accent).right().tabular());
-    }
 }

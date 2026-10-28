@@ -5,9 +5,6 @@ use crate::events::{AppEvent, EventSink};
 use crate::state::LaunchApp;
 use std::collections::BTreeMap;
 use std::path::Path;
-use windows::Win32::Foundation::MAX_PATH;
-use windows::Win32::System::Threading::{OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_NAME_WIN32};
-use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
 
 const LIMIT: usize = 300;
 
@@ -56,20 +53,4 @@ fn visit(dir: &Path, out: &mut BTreeMap<String, LaunchApp>) {
     }
 }
 
-/// The foreground executable's file name. Called only once per minute while
-/// Time Tracker is explicitly on; titles and document names are never read.
-pub fn foreground_name() -> Option<String> {
-    let hwnd = unsafe { GetForegroundWindow() };
-    if hwnd.is_invalid() { return None; }
-    let mut pid = 0;
-    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)); }
-    if pid == 0 { return None; }
-    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok()?;
-    let mut buf = [0u16; MAX_PATH as usize];
-    let mut len = buf.len() as u32;
-    let ok = unsafe { QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, windows::core::PWSTR(buf.as_mut_ptr()), &mut len) }.is_ok();
-    unsafe { let _ = windows::Win32::Foundation::CloseHandle(handle); }
-    if !ok { return None; }
-    std::path::Path::new(&String::from_utf16_lossy(&buf[..len as usize])).file_stem().map(|s| s.to_string_lossy().into_owned())
-}
 

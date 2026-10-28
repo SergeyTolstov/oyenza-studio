@@ -121,7 +121,6 @@ pub struct Settings {
     /// island once when a new version is out.
     pub update_check: bool,
     /// Record foreground app time locally, once the person explicitly enables it.
-    pub time_tracker: bool,
     /// Let the local browser extension send CRM and WhatsApp notifications to the Island.
     pub browser_notifications: bool,
     /// How long a task reminder remains visible in the Island.
@@ -194,7 +193,6 @@ impl Default for Settings {
             game_stats: false,
             game_peek: false,
             update_check: true,
-            time_tracker: false,
             browser_notifications: false,
             task_reminder_secs: 8,
         }

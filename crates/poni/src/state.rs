@@ -278,6 +278,10 @@ pub struct PageUiState {
     pub task_reminder: String,
     /// New work-timer comment on the Time page.
     pub timer_comment: String,
+    /// Optional date/time for a planned Time item (`28.10 14:30`).
+    pub time_plan_date: String,
+    /// The planned work item currently being edited in the Time page.
+    pub time_editing: Option<u64>,
     /// Scroll offset of the planned-work timer list.
     pub time_timer_scroll: f32,
     pub task_input: String,

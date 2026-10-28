@@ -24,6 +24,9 @@ pub struct TaskTimer {
     pub elapsed: u64,
     /// Unix time when the current run began; `None` when paused.
     pub started_at: Option<i64>,
+    /// Optional planned local date/time, kept separate from actual tracked time.
+    #[serde(default)]
+    pub planned_unix: Option<i64>,
 }
 
 impl TaskTimer {
@@ -57,12 +60,12 @@ impl TimeTracker {
 
     /// Add a planned work item. It is deliberately paused: planning work and
     /// starting work are separate actions.
-    pub fn plan_timer(&mut self, comment: String) {
+    pub fn plan_timer(&mut self, comment: String, planned_unix: Option<i64>) {
         let comment = comment.trim();
         if comment.is_empty() || self.timers.len() >= 24 { return; }
         let id = self.next_timer_id.max(1);
         self.next_timer_id = id.saturating_add(1);
-        self.timers.push(TaskTimer { id, comment: comment.to_string(), elapsed: 0, started_at: None });
+        self.timers.push(TaskTimer { id, comment: comment.to_string(), elapsed: 0, started_at: None, planned_unix });
     }
 }
 
@@ -73,11 +76,12 @@ mod tests {
     #[test]
     fn planned_timer_waits_for_an_explicit_start() {
         let mut tracker = TimeTracker::default();
-        tracker.plan_timer("  Prepare release notes  ".into());
+        tracker.plan_timer("  Prepare release notes  ".into(), Some(2_000));
         let timer = tracker.timers.first().unwrap();
         assert_eq!(timer.comment, "Prepare release notes");
         assert!(!timer.running());
         assert_eq!(timer.seconds(1_000), 0);
+        assert_eq!(timer.planned_unix, Some(2_000));
     }
 }
 

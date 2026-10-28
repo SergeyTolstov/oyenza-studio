@@ -1612,11 +1612,21 @@ impl App {
             }
             self.schedule_update();
         }
-        let now = &self.st.settings;
-        if before.theme != now.theme {
-            self.st.accent = theme_accent(now.theme);
+        let theme = self.st.settings.theme;
+        let monitor = self.st.settings.monitor;
+        let hide_in_fullscreen = self.st.settings.hide_in_fullscreen;
+        if before.theme != theme {
+            self.st.accent = theme_accent(theme);
         }
-        if before.hide_in_fullscreen != now.hide_in_fullscreen {
+        if before.monitor != monitor {
+            // Settings changes must move the already-running island too, not
+            // just be remembered for the next start.
+            self.monitor = window::pick_monitor(monitor);
+            self.set_dpi(self.monitor.dpi);
+            self.clock.set_monitor(self.monitor.handle);
+            self.on_event(AppEvent::Fullscreen(false));
+        }
+        if before.hide_in_fullscreen != hide_in_fullscreen {
             // Apply at once: show the island over the full-screen app, or hide it.
             self.on_event(AppEvent::Fullscreen(self.fullscreen_on));
         }

@@ -12,6 +12,11 @@ relay exists.
 3. Choose this folder: `extensions/oyenza-browser-bridge`.
 4. Keep Oyenza Studio running, then open Rubin CRM or WhatsApp Web.
 
+Click the extension's puzzle-piece icon and choose **Send test notification**.
+If no Island card appears, first make sure Oyenza was rebuilt from this branch
+and **Browser notifications** is on in Settings. Reload the extension after a
+source update.
+
 WhatsApp sends only an unread-count notification. The Rubin adapter begins
 with common task-card attributes (`data-task-id`, `data-testid*="task"` and
 task rows). If Rubin uses different markup or an API payload, update

@@ -10,6 +10,7 @@
     "http://127.0.0.1:32148/*"
   ],
   "background": { "service_worker": "service-worker.js", "type": "module" },
+  "action": { "default_popup": "popup.html", "default_title": "Oyenza Browser Bridge" },
   "content_scripts": [
     {
       "matches": ["https://crm-rubin.vercel.app/*"],

@@ -1945,6 +1945,18 @@ impl App {
                 self.st.launch_apps = apps;
                 self.st.ui.apps_loading = false;
             }
+            AppEvent::BrowserNotice { source, title, body } => {
+                if self.st.settings.browser_notifications {
+                    let (icon, color, prefix) = if source.eq_ignore_ascii_case("whatsapp") {
+                        (Icon::Phone, palette::GREEN, "WhatsApp")
+                    } else {
+                        (Icon::App, self.st.accent, "CRM")
+                    };
+                    let title = format!("{prefix}: {title}");
+                    self.st.notify(icon, color, title, body, 8.0, None);
+                    self.st.chime();
+                }
+            }
             AppEvent::System(m) => {
                 // A reading still on its way when the page closed is dropped.
                 if self.sysmon_on || self.st.game.active {

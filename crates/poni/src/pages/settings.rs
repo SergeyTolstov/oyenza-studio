@@ -84,6 +84,7 @@ enum Switch {
     Pronunciation,
     Sounds,
     Clipboard,
+    BrowserNotifications,
     Autostart,
     Updates,
 }
@@ -102,7 +103,7 @@ const LEFT: &[Row] = &[
     Row::Switch(Switch::Sounds, "Sounds"),
     Row::Switch(Switch::Updates, "Tell me about new versions"),
 ];
-const RIGHT: &[Row] = &[Row::Switch(Switch::Clipboard, "Clipboard history"), Row::Fullscreen, Row::Switch(Switch::Autostart, "Start with Windows")];
+const RIGHT: &[Row] = &[Row::Switch(Switch::Clipboard, "Clipboard history"), Row::Switch(Switch::BrowserNotifications, "Browser notifications"), Row::Fullscreen, Row::Switch(Switch::Autostart, "Start with Windows")];
 const COLUMNS: [&[Row]; 2] = [LEFT, RIGHT];
 /// Rows in the taller column.
 const ROWS: usize = if LEFT.len() > RIGHT.len() { LEFT.len() } else { RIGHT.len() };
@@ -367,6 +368,7 @@ fn switch_on(st: &AppState, sw: Switch) -> Option<bool> {
         Switch::Pronunciation => Some(s.lyrics_pronunciation),
         Switch::Sounds => Some(s.sounds),
         Switch::Clipboard => Some(s.clipboard_history),
+        Switch::BrowserNotifications => Some(s.browser_notifications),
         Switch::Autostart => st.ui.autostart,
         Switch::Updates => Some(s.update_check),
     }
@@ -380,6 +382,7 @@ fn flip(st: &mut AppState, sw: Switch, on: Option<bool>) {
         Switch::Sounds => s.sounds = !s.sounds,
         // Off forgets the history, pinned items included (as from the tray).
         Switch::Clipboard => s.clipboard_history = !s.clipboard_history,
+        Switch::BrowserNotifications => s.browser_notifications = !s.browser_notifications,
         Switch::Updates => s.update_check = !s.update_check,
         Switch::Autostart => {
             if let Some(on) = on {

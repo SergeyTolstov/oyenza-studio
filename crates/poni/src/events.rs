@@ -157,6 +157,8 @@ pub enum AppEvent {
     Stats(SysStats),
     /// Start-menu entries, read on demand for the Apps page.
     Apps(Vec<LaunchApp>),
+    /// A local browser extension saw a new CRM task or WhatsApp notification.
+    BrowserNotice { source: String, title: String, body: String },
     /// The System page's latest reading and the minute behind it
     /// (`services::sysmon`, each second while the page is open).
     System(Box<poni_core::sysmon::Monitor>),

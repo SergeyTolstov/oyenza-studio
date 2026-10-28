@@ -8,6 +8,7 @@ pub mod applemusic_ui;
 pub mod apps;
 pub mod audio;
 pub mod backdrop;
+pub mod browser_bridge;
 pub mod bluetooth;
 pub mod clipboard;
 pub mod frames;
@@ -49,6 +50,8 @@ pub struct Services {
     oyenza: Option<oyenza::OyenzaService>,
     pairdrop: Option<pairdrop::PairDropService>,
     addons: Option<addons::AddonService>,
+    /// Sleeps in `accept` on the loopback socket; never sends data off this PC.
+    _browser_bridge: Option<browser_bridge::BrowserBridge>,
 }
 
 fn started<T, E: std::fmt::Display>(name: &str, r: Result<T, E>) -> Option<T> {
@@ -79,7 +82,8 @@ impl Services {
         // Asleep unless an add-on is on; then it only checks the files it has.
         let on = poni_core::addons::ALL.iter().filter(|a| settings.addon_on(a.id)).map(|a| a.id).collect();
         let addons = started("add-ons", addons::AddonService::start(sink.clone(), on));
-        Self { media, lyrics, _audio: audio, _bluetooth: bluetooth, fullscreen, clip, oyenza, pairdrop, addons }
+        let browser_bridge = started("browser bridge", browser_bridge::BrowserBridge::start(sink.clone()));
+        Self { media, lyrics, _audio: audio, _bluetooth: bluetooth, fullscreen, clip, oyenza, pairdrop, addons, _browser_bridge: browser_bridge }
     }
 
     pub fn stop(self, _helper: HWND) {

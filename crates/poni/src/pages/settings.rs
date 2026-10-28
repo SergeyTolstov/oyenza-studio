@@ -94,7 +94,6 @@ enum Switch {
 enum Row {
     Switch(Switch, &'static str),
     Fullscreen,
-    TaskReminderDuration,
 }
 
 const LEFT: &[Row] = &[
@@ -102,7 +101,6 @@ const LEFT: &[Row] = &[
     Row::Switch(Switch::Pronunciation, "Lyrics pronunciation"),
     Row::Switch(Switch::Sounds, "Sounds"),
     Row::Switch(Switch::Updates, "Tell me about new versions"),
-    Row::TaskReminderDuration,
 ];
 const RIGHT: &[Row] = &[Row::Switch(Switch::Clipboard, "Clipboard history"), Row::Fullscreen, Row::Switch(Switch::Autostart, "Start with Windows")];
 const COLUMNS: [&[Row]; 2] = [LEFT, RIGHT];
@@ -206,14 +204,6 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
                     let sel = FULLSCREEN.iter().position(|f| f.0 == st.settings.hide_in_fullscreen).unwrap_or(0);
                     if let Some(i) = choice_row(ui, row, "In full-screen apps", "settings.fullscreen", &FULLSCREEN.map(|f| f.1), sel) {
                         st.settings.hide_in_fullscreen = FULLSCREEN[i].0;
-                        st.cmd(Command::SaveSettings);
-                    }
-                }
-                Row::TaskReminderDuration => {
-                    const DURATIONS: [(u32, &str); 4] = [(3, "3 sec"), (8, "8 sec"), (15, "15 sec"), (30, "30 sec")];
-                    let sel = DURATIONS.iter().position(|d| d.0 == st.settings.task_reminder_secs).unwrap_or(1);
-                    if let Some(i) = choice_row(ui, row, "Task reminder", "settings.task_reminder", &DURATIONS.map(|d| d.1), sel) {
-                        st.settings.task_reminder_secs = DURATIONS[i].0;
                         st.cmd(Command::SaveSettings);
                     }
                 }

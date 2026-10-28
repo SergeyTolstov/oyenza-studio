@@ -264,9 +264,12 @@ impl Settings {
         if self.settings_version < 5 {
             self.clipboard_history = true;
         }
-        // Shelf is no longer offered; old direct links return to Music.
+        // Shelf is no longer offered; Tasks and Focus moved into Time.
         if self.start_page.eq_ignore_ascii_case("shelf") {
             self.start_page = "media".into();
+        }
+        if self.start_page.eq_ignore_ascii_case("tasks") || self.start_page.eq_ignore_ascii_case("focus") {
+            self.start_page = "time".into();
         }
         self.settings_version = self.settings_version.max(SETTINGS_VERSION);
         // Step aside is no longer offered: the island stays over maximized windows.

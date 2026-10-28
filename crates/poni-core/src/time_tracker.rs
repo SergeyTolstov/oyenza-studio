@@ -55,12 +55,29 @@ impl TimeTracker {
 
     pub fn total(&self) -> u64 { self.apps.values().sum() }
 
-    pub fn start_timer(&mut self, comment: String, now: i64) {
+    /// Add a planned work item. It is deliberately paused: planning work and
+    /// starting work are separate actions.
+    pub fn plan_timer(&mut self, comment: String) {
         let comment = comment.trim();
         if comment.is_empty() || self.timers.len() >= 24 { return; }
         let id = self.next_timer_id.max(1);
         self.next_timer_id = id.saturating_add(1);
-        self.timers.push(TaskTimer { id, comment: comment.to_string(), elapsed: 0, started_at: Some(now) });
+        self.timers.push(TaskTimer { id, comment: comment.to_string(), elapsed: 0, started_at: None });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn planned_timer_waits_for_an_explicit_start() {
+        let mut tracker = TimeTracker::default();
+        tracker.plan_timer("  Prepare release notes  ".into());
+        let timer = tracker.timers.first().unwrap();
+        assert_eq!(timer.comment, "Prepare release notes");
+        assert!(!timer.running());
+        assert_eq!(timer.seconds(1_000), 0);
     }
 }
 

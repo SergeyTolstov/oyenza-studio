@@ -36,6 +36,7 @@ fn save_plan(st: &mut AppState) {
         if let Some(timer) = st.store.time_tracker.timers.iter_mut().find(|timer| timer.id == id) {
             timer.comment = comment;
             timer.planned_unix = planned;
+            timer.reminder_mask = 0;
             st.save();
         }
     } else {

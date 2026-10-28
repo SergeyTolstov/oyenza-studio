@@ -2737,6 +2737,7 @@ impl App {
         if let Some(ended) = self.st.pomodoro.tick(now) {
             pages::focus::on_phase_ended(&mut self.st, ended);
         }
+        self.planned_work_reminder_tick();
         // Signed out: the Oyenza tab is gone.
         if self.st.page == PageKind::Oyenza && !self.st.oyenza.tab_visible() {
             self.st.page = PageKind::ALL[0];
@@ -2746,6 +2747,24 @@ impl App {
         // Prayer times switched off: its tab is gone.
         if self.st.page == PageKind::Prayer && !self.st.prayer_on() {
             self.st.page = PageKind::Addons;
+        }
+    }
+
+    /// Advance notices for a planned work item. The Time store remembers each
+    /// milestone, so a restart can't make the same reminder appear again.
+    fn planned_work_reminder_tick(&mut self) {
+        let due = self.st.store.time_tracker.due_reminder(self.st.unix);
+        let Some((id, lead, comment)) = due else { return };
+        if self.st.store.time_tracker.mark_reminder_shown(id, lead) {
+            self.st.save();
+            let lead_label = match lead {
+                3_600 => "in 1 hour",
+                1_800 => "in 30 minutes",
+                300 => "in 5 minutes",
+                _ => "in 1 minute",
+            };
+            self.st.notify(Icon::Calendar, self.st.accent, format!("Planned work {lead_label}"), comment, 8.0, Some(NoticeAction::OpenPage(PageKind::TimeTracker)));
+            self.st.chime();
         }
     }
 
@@ -3207,6 +3226,11 @@ impl App {
         }
         if let poni_core::pomodoro::RunState::Running { ends_at } = self.st.pomodoro.run {
             consider(ends_at + 0.005);
+        }
+        // Planned work wakes even while Time is closed, so all four advance
+        // notifications arrive at their intended wall-clock moments.
+        if let Some(at) = self.st.store.time_tracker.next_reminder_at(self.st.unix) {
+            consider(now + (at - self.st.unix).max(0) as f64 + 0.005);
         }
         // The music pill wakes for every sung line (in every theme), and Pill's
         // pills for their own changes; nobody sees those while the session is

@@ -27,6 +27,9 @@ pub struct TaskTimer {
     /// Optional planned local date/time, kept separate from actual tracked time.
     #[serde(default)]
     pub planned_unix: Option<i64>,
+    /// Bit set for each advance reminder already shown (60, 30, 5, 1 min).
+    #[serde(default)]
+    pub reminder_mask: u8,
 }
 
 impl TaskTimer {
@@ -65,9 +68,49 @@ impl TimeTracker {
         if comment.is_empty() || self.timers.len() >= 24 { return; }
         let id = self.next_timer_id.max(1);
         self.next_timer_id = id.saturating_add(1);
-        self.timers.push(TaskTimer { id, comment: comment.to_string(), elapsed: 0, started_at: None, planned_unix });
+        self.timers.push(TaskTimer { id, comment: comment.to_string(), elapsed: 0, started_at: None, planned_unix, reminder_mask: 0 });
+    }
+
+    /// The next planned, not-yet-started task reminder due at `now`.
+    /// The bitmask makes all four notices durable across restarts.
+    pub fn due_reminder(&self, now: i64) -> Option<(u64, i64, String)> {
+        self.timers.iter().filter(|timer| !timer.running()).flat_map(|timer| {
+            timer.planned_unix.into_iter().flat_map(move |at| {
+                REMINDER_LEADS.into_iter().enumerate().filter_map(move |(bit, lead)| {
+                    (timer.reminder_mask & (1 << bit) == 0 && now >= at - lead).then(|| (timer.id, lead, timer.comment.clone()))
+                })
+            })
+        }).min_by_key(|(_, lead, _)| *lead)
+    }
+
+    pub fn mark_reminder_shown(&mut self, id: u64, lead: i64) -> bool {
+        if !REMINDER_LEADS.contains(&lead) { return false; }
+        let Some(timer) = self.timers.iter_mut().find(|timer| timer.id == id) else { return false };
+        // If the PC woke late, surface the most urgent passed milestone and
+        // skip older ones rather than playing a stale burst of reminders.
+        for (index, value) in REMINDER_LEADS.iter().enumerate() {
+            if *value >= lead {
+                timer.reminder_mask |= 1 << index;
+            }
+        }
+        true
+    }
+
+    /// Unix time for the next advance reminder. A due one returns `now` so
+    /// the caller wakes immediately and surfaces it.
+    pub fn next_reminder_at(&self, now: i64) -> Option<i64> {
+        self.timers.iter().filter(|timer| !timer.running()).flat_map(|timer| {
+            timer.planned_unix.into_iter().flat_map(move |at| {
+                REMINDER_LEADS.into_iter().enumerate().filter_map(move |(bit, lead)| {
+                    (timer.reminder_mask & (1 << bit) == 0).then_some((at - lead).max(now))
+                })
+            })
+        }).min()
     }
 }
+
+/// Seconds before a planned item: one hour, half an hour, five and one minute.
+pub const REMINDER_LEADS: [i64; 4] = [3_600, 1_800, 300, 60];
 
 #[cfg(test)]
 mod tests {
@@ -82,6 +125,22 @@ mod tests {
         assert!(!timer.running());
         assert_eq!(timer.seconds(1_000), 0);
         assert_eq!(timer.planned_unix, Some(2_000));
+        assert_eq!(tracker.next_reminder_at(0), Some(0));
+    }
+
+    #[test]
+    fn planned_item_reminds_at_each_lead_once() {
+        let mut tracker = TimeTracker::default();
+        tracker.plan_timer("Call supplier".into(), Some(10_000));
+        assert_eq!(tracker.due_reminder(6_399), None);
+        let (id, lead, _) = tracker.due_reminder(6_400).unwrap();
+        assert_eq!(lead, 3_600);
+        assert!(tracker.mark_reminder_shown(id, lead));
+        assert_eq!(tracker.due_reminder(8_200).map(|(_, lead, _)| lead), Some(1_800));
+        let (id, lead, _) = tracker.due_reminder(9_700).unwrap();
+        assert_eq!(lead, 300, "late wake chooses the current milestone");
+        assert!(tracker.mark_reminder_shown(id, lead));
+        assert_eq!(tracker.due_reminder(9_700).map(|(_, lead, _)| lead), None, "older notices are not replayed");
     }
 }
 

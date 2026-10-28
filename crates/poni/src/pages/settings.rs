@@ -22,7 +22,7 @@ use crate::ui::{wid, wid_n, PillStyle, Ui, PILL_GAP, PILL_REGULAR, PILL_SMALL};
 use poni_core::geom::{palette, Color, Point, Rect};
 use poni_core::oyenza;
 use poni_core::phonedrop::fmt_bytes;
-use poni_core::settings::{IdleStyle, Theme};
+use poni_core::settings::{IdleStyle, MonitorChoice, Theme};
 use poni_core::update::Release;
 
 /// Account row, a line, the pickers under their labels (or a row each on a
@@ -95,6 +95,7 @@ enum Switch {
 enum Row {
     Switch(Switch, &'static str),
     Fullscreen,
+    Monitor,
 }
 
 const LEFT: &[Row] = &[
@@ -103,7 +104,7 @@ const LEFT: &[Row] = &[
     Row::Switch(Switch::Sounds, "Sounds"),
     Row::Switch(Switch::Updates, "Tell me about new versions"),
 ];
-const RIGHT: &[Row] = &[Row::Switch(Switch::Clipboard, "Clipboard history"), Row::Switch(Switch::BrowserNotifications, "Browser notifications"), Row::Fullscreen, Row::Switch(Switch::Autostart, "Start with Windows")];
+const RIGHT: &[Row] = &[Row::Switch(Switch::Clipboard, "Clipboard history"), Row::Switch(Switch::BrowserNotifications, "Browser notifications"), Row::Fullscreen, Row::Monitor, Row::Switch(Switch::Autostart, "Start with Windows")];
 const COLUMNS: [&[Row]; 2] = [LEFT, RIGHT];
 /// Rows in the taller column.
 const ROWS: usize = if LEFT.len() > RIGHT.len() { LEFT.len() } else { RIGHT.len() };
@@ -205,6 +206,18 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
                     let sel = FULLSCREEN.iter().position(|f| f.0 == st.settings.hide_in_fullscreen).unwrap_or(0);
                     if let Some(i) = choice_row(ui, row, "In full-screen apps", "settings.fullscreen", &FULLSCREEN.map(|f| f.1), sel) {
                         st.settings.hide_in_fullscreen = FULLSCREEN[i].0;
+                        st.cmd(Command::SaveSettings);
+                    }
+                }
+                Row::Monitor => {
+                    const MONITORS: [(MonitorChoice, &str); 3] = [
+                        (MonitorChoice::Primary, "Primary"),
+                        (MonitorChoice::Secondary, "Second"),
+                        (MonitorChoice::Cursor, "At mouse"),
+                    ];
+                    let sel = MONITORS.iter().position(|item| item.0 == st.settings.monitor).unwrap_or(0);
+                    if let Some(i) = choice_row(ui, row, "Island display", "settings.monitor", &MONITORS.map(|item| item.1), sel) {
+                        st.settings.monitor = MONITORS[i].0;
                         st.cmd(Command::SaveSettings);
                     }
                 }

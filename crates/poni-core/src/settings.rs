@@ -42,6 +42,9 @@ pub enum Theme {
 #[serde(rename_all = "snake_case")]
 pub enum MonitorChoice {
     Primary,
+    /// The first connected non-primary display. Falls back to Primary when
+    /// there is no second monitor.
+    Secondary,
     /// The monitor under the cursor when Poni starts.
     Cursor,
 }

@@ -8,11 +8,11 @@ use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, AtomicU64, Ordering}
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 use windows::core::{w, Result, PCWSTR};
-use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};
+use windows::Win32::Foundation::{BOOL, HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Dwm::DwmFlush;
 use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1, IDXGIOutput};
 use windows::Win32::Graphics::Gdi::{
-    EnumDisplaySettingsW, GetMonitorInfoW, MonitorFromPoint, DEVMODEW, ENUM_CURRENT_SETTINGS, HMONITOR, MONITORINFO, MONITORINFOEXW,
+    EnumDisplayMonitors, EnumDisplaySettingsW, GetMonitorInfoW, MonitorFromPoint, DEVMODEW, ENUM_CURRENT_SETTINGS, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW,
     MONITOR_DEFAULTTOPRIMARY,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -281,8 +281,12 @@ pub fn monitor_info(hmon: HMONITOR) -> Option<MonitorInfo> {
 
 pub fn pick_monitor(choice: MonitorChoice) -> MonitorInfo {
     unsafe {
+        if choice == MonitorChoice::Secondary {
+            return secondary_monitor().unwrap_or_else(|| pick_monitor(MonitorChoice::Primary));
+        }
         let point = match choice {
             MonitorChoice::Primary => POINT { x: 0, y: 0 },
+            MonitorChoice::Secondary => unreachable!(),
             MonitorChoice::Cursor => {
                 let mut p = POINT::default();
                 let _ = GetCursorPos(&mut p);
@@ -297,6 +301,26 @@ pub fn pick_monitor(choice: MonitorChoice) -> MonitorInfo {
             dpi: 96,
         })
     }
+}
+
+/// First connected display other than Windows' primary one. Oyenza has one
+/// island window by design, so selecting it also guarantees no island is
+/// drawn on the main display.
+fn secondary_monitor() -> Option<MonitorInfo> {
+    unsafe extern "system" fn collect(hmon: HMONITOR, _hdc: HDC, _rect: *mut RECT, data: LPARAM) -> BOOL {
+        let monitors = unsafe { &mut *(data.0 as *mut Vec<HMONITOR>) };
+        let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+        if unsafe { GetMonitorInfoW(hmon, &mut info).as_bool() } && info.dwFlags & MONITORINFOF_PRIMARY == 0 {
+            monitors.push(hmon);
+        }
+        BOOL(1)
+    }
+
+    let mut monitors = Vec::new();
+    unsafe {
+        let _ = EnumDisplayMonitors(HDC::default(), None, Some(collect), LPARAM((&mut monitors as *mut Vec<HMONITOR>) as isize));
+    }
+    monitors.into_iter().next().and_then(monitor_info)
 }
 
 // ---------------------------------------------------------------- frame clock

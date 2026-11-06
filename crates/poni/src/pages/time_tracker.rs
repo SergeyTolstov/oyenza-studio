@@ -32,11 +32,23 @@ pub fn draw_quick(ui: &mut Ui, st: &mut AppState, area: Rect) {
 
 fn clear_editor(st: &mut AppState) {
     st.ui.time_editing = None;
+    st.ui.time_editing_completed = None;
     st.ui.timer_comment.clear();
     st.ui.time_plan_date.clear();
 }
 
 fn save_plan(st: &mut AppState) {
+    let comment = st.ui.timer_comment.trim().to_string();
+    if let Some(id) = st.ui.time_editing_completed {
+        if st.store.time_tracker.history_day == st.local.day_key() {
+            if let Some(timer) = st.store.time_tracker.history.iter_mut().find(|timer| timer.id == id) {
+                timer.comment = comment;
+                st.save();
+            }
+        }
+        clear_editor(st);
+        return;
+    }
     let planned = match parse_planned(&st.ui.time_plan_date, st) {
         Ok(value) => value,
         Err(message) => {
@@ -44,7 +56,6 @@ fn save_plan(st: &mut AppState) {
             return;
         }
     };
-    let comment = st.ui.timer_comment.trim().to_string();
     if let Some(id) = st.ui.time_editing {
         if let Some(timer) = st.store.time_tracker.timers.iter_mut().find(|timer| timer.id == id) {
             timer.comment = comment;
@@ -153,11 +164,12 @@ pub fn next_wake(st: &AppState) -> Option<f64> {
 }
 
 pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
-    let editing = st.ui.time_editing.is_some();
+    let editing_completed = st.ui.time_editing_completed.is_some();
+    let editing = st.ui.time_editing.is_some() || editing_completed;
     let input = Rect::new(area.x, area.y, area.w, 34.0);
-    let add = ui.text_input_row(wid("time.comment"), input, &mut st.ui.timer_comment, if editing { "Edit work item" } else { "Add to work plan — start it when you begin" }, 120, st.accent, Some(if editing { Icon::Sliders } else { Icon::Plus }));
+    let add = ui.text_input_row(wid("time.comment"), input, &mut st.ui.timer_comment, if editing_completed { "Edit completed work" } else if editing { "Edit work item" } else { "Add to work plan — start it when you begin" }, 120, st.accent, Some(if editing { Icon::Sliders } else { Icon::Plus }));
     let date_r = Rect::new(area.x, area.y + 40.0, area.w - 112.0, PILL_SMALL);
-    let date = ui.text_input_row(wid("time.date"), date_r, &mut st.ui.time_plan_date, "Planned: 28.10 14:30", 20, st.accent, Some(Icon::Calendar));
+    let date = ui.text_input_row(wid("time.date"), date_r, &mut st.ui.time_plan_date, if editing_completed { "Finished item — time is kept" } else { "Planned: 28.10 14:30" }, 20, st.accent, Some(Icon::Calendar));
     let save_r = Rect::new(date_r.right() + 8.0, date_r.y, 76.0, PILL_SMALL);
     let save = ui.pill(wid("time.plan.save"), save_r, if editing { "Save" } else { "Add" }, Some(Icon::Check), PillStyle::Primary(st.accent)).clicked;
     let cancel_r = Rect::new(save_r.right() + 4.0, date_r.y, 24.0, PILL_SMALL);
@@ -228,11 +240,16 @@ pub fn draw(ui: &mut Ui, st: &mut AppState, area: Rect) {
             if row.bottom() <= view.y || row.y >= view.bottom() { continue; }
             ui.c.icon(Icon::Check, Rect::new(row.x + 4.0, row.y + 6.0, 18.0, 18.0), palette::GREEN);
             let text_style = TextStyle::body().color(palette::TEXT_DIM);
-            let text_r = Rect::new(row.x + 29.0, row.y, row.w - 170.0, row.h);
+            let text_r = Rect::new(row.x + 29.0, row.y, row.w - 220.0, row.h);
             let shown = fit_text(ui, &timer.comment, &text_style, text_r.w);
             ui.c.text(&shown, text_r, &text_style);
             ui.c.text(&fmt_duration(timer.elapsed as f64), Rect::new(row.right() - 126.0, row.y, 62.0, row.h), &TextStyle::body().color(palette::GREEN).right().tabular());
-            ui.c.text("Done", Rect::new(row.right() - 54.0, row.y, 54.0, row.h), &TextStyle::footnote().color(palette::TEXT_FAINT).right());
+            if ui.pill(wid_n("time.completed.edit", timer.id), Rect::new(row.right() - 54.0, row.y + 3.0, 54.0, PILL_SMALL), "Edit", None, PillStyle::Utility).clicked {
+                st.ui.time_editing = None;
+                st.ui.time_editing_completed = Some(timer.id);
+                st.ui.timer_comment = timer.comment.clone();
+                st.ui.time_plan_date.clear();
+            }
         }
     }
     ui.c.unclip();

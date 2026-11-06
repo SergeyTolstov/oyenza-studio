@@ -7,11 +7,23 @@
 use crate::events::{AppEvent, EventSink};
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 pub const PORT: u16 = 32_148;
 const MAX_REQUEST: usize = 16 * 1024;
+static PENDING_CALL_ACTION: OnceLock<Mutex<Option<(String, Instant)>>> = OnceLock::new();
 
 pub struct BrowserBridge;
+
+/// Queue a short-lived, local-only answer request for the browser extension.
+/// The extension polls only while it sees an incoming call.
+pub fn request_call_accept(source: &str) {
+    let action = PENDING_CALL_ACTION.get_or_init(|| Mutex::new(None));
+    if let Ok(mut action) = action.lock() {
+        *action = Some((source.to_ascii_lowercase(), Instant::now()));
+    }
+}
 
 impl BrowserBridge {
     pub fn start(sink: EventSink) -> io::Result<Self> {
@@ -59,6 +71,22 @@ fn handle(mut stream: TcpStream, sink: &EventSink) {
         reply(&mut stream, "204 No Content", origin);
         return;
     }
+    if method_path.starts_with("GET /v1/action?source=") {
+        let source = method_path.split("source=").nth(1).and_then(|s| s.split_whitespace().next()).unwrap_or("").to_ascii_lowercase();
+        let action = PENDING_CALL_ACTION.get_or_init(|| Mutex::new(None));
+        let accept = action.lock().ok().and_then(|mut value| {
+            let (pending, at) = value.as_ref()?;
+            if *pending == source && at.elapsed() <= Duration::from_secs(45) {
+                *value = None;
+                Some(true)
+            } else {
+                if at.elapsed() > Duration::from_secs(45) { *value = None; }
+                None
+            }
+        }).unwrap_or(false);
+        reply_json(&mut stream, "200 OK", origin, if accept { r#"{"action":"accept-call"}"# } else { r#"{}"# });
+        return;
+    }
     if !method_path.starts_with("POST /v1/notice ") {
         reply(&mut stream, "404 Not Found", origin);
         return;
@@ -97,6 +125,12 @@ fn clean(value: Option<&str>, limit: usize) -> String {
 fn reply(stream: &mut TcpStream, status: &str, origin: &str) {
     let origin = if extension_origin(origin) { origin } else { "null" };
     let response = format!("HTTP/1.1 {status}\r\nAccess-Control-Allow-Origin: {origin}\r\nAccess-Control-Allow-Methods: POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+    let _ = stream.write_all(response.as_bytes());
+}
+
+fn reply_json(stream: &mut TcpStream, status: &str, origin: &str, body: &str) {
+    let origin = if extension_origin(origin) { origin } else { "null" };
+    let response = format!("HTTP/1.1 {status}\r\nAccess-Control-Allow-Origin: {origin}\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
     let _ = stream.write_all(response.as_bytes());
 }
 

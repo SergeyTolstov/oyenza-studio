@@ -2,11 +2,12 @@
   "manifest_version": 3,
   "name": "Oyenza Browser Bridge",
   "version": "0.1.0",
-  "description": "Shows local CRM and WhatsApp Web events in Oyenza Studio.",
+  "description": "Shows local CRM, WhatsApp Web and Telegram Web events in Oyenza Studio.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://crm-rubin.vercel.app/*",
     "https://web.whatsapp.com/*",
+    "https://web.telegram.org/*",
     "http://127.0.0.1:32148/*"
   ],
   "background": { "service_worker": "service-worker.js", "type": "module" },
@@ -20,6 +21,11 @@
     {
       "matches": ["https://web.whatsapp.com/*"],
       "js": ["content-whatsapp.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://web.telegram.org/*"],
+      "js": ["content-telegram.js"],
       "run_at": "document_idle"
     }
   ]

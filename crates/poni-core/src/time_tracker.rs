@@ -1,10 +1,21 @@
 //! Manual work plans, stopwatches and daily completed-work history.
 
+use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TimeTracker {
+    /// Daily foreground-app activity. Only executable display names are kept;
+    /// window titles, documents and browser URLs never enter this store.
+    #[serde(default)]
+    pub usage_day: String,
+    #[serde(default)]
+    pub apps: BTreeMap<String, u64>,
+    #[serde(default)]
+    pub active_app: Option<String>,
+    #[serde(default)]
+    pub sampled_at: i64,
     /// Manually started work timers, saved with their purpose.
     pub timers: Vec<TaskTimer>,
     pub next_timer_id: u64,
@@ -53,6 +64,26 @@ impl TaskTimer {
 }
 
 impl TimeTracker {
+    /// Add the elapsed active time to the previously foreground application,
+    /// then remember the app currently in focus. Sampling is deliberately
+    /// bounded so a sleep or locked session cannot look like work.
+    pub fn observe_app(&mut self, day: String, now: i64, active: Option<String>) {
+        if self.usage_day != day {
+            self.usage_day = day;
+            self.apps.clear();
+            self.active_app = None;
+            self.sampled_at = now;
+        }
+        if let Some(name) = self.active_app.as_ref() {
+            let elapsed = now.saturating_sub(self.sampled_at).min(90) as u64;
+            *self.apps.entry(name.clone()).or_default() += elapsed;
+        }
+        self.active_app = active;
+        self.sampled_at = now;
+    }
+
+    pub fn app_total(&self) -> u64 { self.apps.values().sum() }
+
     /// Add a planned work item. It is deliberately paused: planning work and
     /// starting work are separate actions.
     pub fn plan_timer(&mut self, comment: String, planned_unix: Option<i64>) {

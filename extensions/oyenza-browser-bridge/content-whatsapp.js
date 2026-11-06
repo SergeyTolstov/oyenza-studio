@@ -74,3 +74,31 @@ new MutationObserver(scheduleCheck).observe(document.documentElement, {
   attributes: true,
   attributeFilter: ["aria-label", "title", "data-testid", "data-icon"],
 });
+
+// An answer request is only polled while WhatsApp is visibly showing an
+// incoming-call control. No background polling or call data is collected.
+let callWatch = false;
+function incomingCallButton() {
+  return [...document.querySelectorAll("button, [role='button']")].find((node) => /answer|accept/i.test(node.getAttribute("aria-label") || node.textContent || ""));
+}
+function watchIncomingCall() {
+  const button = incomingCallButton();
+  if (!button || callWatch) return;
+  callWatch = true;
+  chrome.runtime.sendMessage({ type: "oyenza-notice", source: "whatsapp", title: "Incoming call", body: "Tap Answer in Oyenza Studio" });
+  const until = Date.now() + 45_000;
+  const poll = async () => {
+    if (Date.now() >= until || !incomingCallButton()) { callWatch = false; return; }
+    try {
+      const reply = await fetch("http://127.0.0.1:32148/v1/action?source=whatsapp");
+      if ((await reply.json()).action === "accept-call") {
+        incomingCallButton()?.click();
+        callWatch = false;
+        return;
+      }
+    } catch (_) {}
+    window.setTimeout(poll, 700);
+  };
+  poll();
+}
+new MutationObserver(watchIncomingCall).observe(document.documentElement, { childList: true, subtree: true });

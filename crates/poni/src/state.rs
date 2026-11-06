@@ -152,6 +152,8 @@ pub enum InlineAction {
     Hide,
     /// Open this version's release notes ("Updated to").
     WhatsNew,
+    /// Ask the local browser bridge to answer an incoming WhatsApp Web call.
+    AcceptWhatsAppCall,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -282,6 +284,8 @@ pub struct PageUiState {
     pub time_plan_date: String,
     /// The planned work item currently being edited in the Time page.
     pub time_editing: Option<u64>,
+    /// A completed work item currently being edited in the Time page.
+    pub time_editing_completed: Option<u64>,
     /// Scroll offset of the planned-work timer list.
     pub time_timer_scroll: f32,
     /// A small, headerless Time input opened by the global quick-add shortcut.

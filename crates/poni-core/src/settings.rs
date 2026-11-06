@@ -49,6 +49,15 @@ pub enum MonitorChoice {
     Cursor,
 }
 
+/// Display language for Oyenza Studio's own interface.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Language {
+    English,
+    Russian,
+    Kazakh,
+}
+
 /// Bumped when defaults change in a way existing files should pick up.
 pub const SETTINGS_VERSION: u32 = 6;
 
@@ -81,6 +90,7 @@ pub struct Settings {
     /// top edge clear. The key stays so files from those versions still load.
     pub step_aside: bool,
     pub monitor: MonitorChoice,
+    pub language: Language,
     pub show_media_activity: bool,
     pub lyrics: bool,
     /// Romanized "pronunciation" line under Japanese, Korean and Chinese lyrics.
@@ -177,6 +187,7 @@ impl Default for Settings {
             hide_in_fullscreen: true,
             step_aside: false,
             monitor: MonitorChoice::Primary,
+            language: Language::English,
             show_media_activity: true,
             lyrics: true,
             lyrics_pronunciation: true,

@@ -1276,6 +1276,11 @@ impl App {
             TIMER_MINUTE => {
                 self.schedule_minute_timer();
                 self.close_idle_phone();
+                if !self.locked && !self.display_off {
+                    self.refresh_time();
+                    self.st.store.time_tracker.observe_app(self.st.local.day_key(), self.st.unix, services::apps::foreground_name());
+                    self.st.save();
+                }
             }
             TIMER_TRAY => {
                 unsafe {
@@ -1964,11 +1969,16 @@ impl App {
                 if self.st.settings.browser_notifications {
                     let (icon, color, prefix) = if source.eq_ignore_ascii_case("whatsapp") {
                         (Icon::Phone, palette::GREEN, "WhatsApp")
+                    } else if source.eq_ignore_ascii_case("telegram") {
+                        (Icon::Phone, palette::BLUE, "Telegram")
                     } else {
                         (Icon::App, self.st.accent, "CRM")
                     };
                     let title = format!("{prefix}: {title}");
                     self.st.notify(icon, color, title, body, 8.0, None);
+                    if source.eq_ignore_ascii_case("whatsapp") && self.st.notice.as_ref().is_some_and(|notice| notice.title.ends_with("Incoming call")) {
+                        self.st.set_notice_inline(InlineAction::AcceptWhatsAppCall);
+                    }
                     self.st.chime();
                 }
             }
@@ -2401,6 +2411,7 @@ impl App {
         self.set_page(PageKind::TimeTracker);
         self.st.ui.quick_add = true;
         self.st.ui.time_editing = None;
+        self.st.ui.time_editing_completed = None;
         self.st.ui.timer_comment.clear();
         self.expand();
         self.input.focused = Some(wid("time.quick"));
@@ -3414,6 +3425,9 @@ impl App {
         if a == InlineAction::WhatsNew && self.st.notice.as_ref().is_some_and(|n| n.icon != Icon::Check) {
             shell::open(&crate::version::notes_url());
         }
+        if a == InlineAction::AcceptWhatsAppCall {
+            services::browser_bridge::request_call_accept("whatsapp");
+        }
         let st = &mut self.st;
         // Already done: the check mark is showing.
         if st.notice.as_ref().is_none_or(|n| n.icon == Icon::Check) {
@@ -3433,7 +3447,7 @@ impl App {
         }
         match a {
             InlineAction::StartFocus => st.pomodoro.start(st.now),
-            InlineAction::ShowAmount | InlineAction::StopAdzan | InlineAction::Hide | InlineAction::WhatsNew => {}
+            InlineAction::ShowAmount | InlineAction::StopAdzan | InlineAction::Hide | InlineAction::WhatsNew | InlineAction::AcceptWhatsAppCall => {}
         }
         let until = st.now + INLINE_DONE_S;
         if let Some(n) = st.notice.as_mut() {

@@ -32,6 +32,16 @@ use crate::state::AppState;
 use crate::ui::{wid, wid_n, Input, Ui};
 use poni_core::datetime::{fmt_clock, fmt_date_short};
 use poni_core::geom::{lerp, palette, Color, Point, Rect};
+use poni_core::settings::Language;
+
+/// A compact three-language helper for the locally authored work-planning UI.
+pub fn tr<'a>(st: &AppState, english: &'a str, russian: &'a str, kazakh: &'a str) -> &'a str {
+    match st.settings.language {
+        Language::English => english,
+        Language::Russian => russian,
+        Language::Kazakh => kazakh,
+    }
+}
 
 /// Height of the header band (tabs + clock) above the page content. The
 /// header row itself is a fixed 36 DIPs ([`header_rect`]); the rest is the
@@ -116,7 +126,7 @@ impl PageKind {
 
     pub fn from_key(s: &str) -> PageKind {
         // Retired pages open Time, where planned work and timers now live.
-        let s = if matches!(s.trim().to_ascii_lowercase().as_str(), "focus" | "tasks") { "time" } else if matches!(s.trim().to_ascii_lowercase().as_str(), "water" | "health" | "addons" | "today" | "shelf") { "media" } else { s.trim() };
+        let s = if matches!(s.trim().to_ascii_lowercase().as_str(), "focus" | "tasks") { "time" } else if matches!(s.trim().to_ascii_lowercase().as_str(), "water" | "health" | "addons" | "shelf") { "media" } else { s.trim() };
         Self::ALL.into_iter().find(|p| p.key().eq_ignore_ascii_case(s)).unwrap_or(PageKind::Media)
     }
 
@@ -187,7 +197,7 @@ pub fn tabs(st: &AppState) -> Vec<PageKind> {
             // Health and Add-ons are no longer part of the product UI. Their
             // data types remain for a compatible upgrade path.
             PageKind::Focus | PageKind::Tasks | PageKind::Health | PageKind::Addons | PageKind::Shelf => false,
-            PageKind::Today => false,
+            PageKind::Today => cfg!(windows),
             PageKind::Apps => cfg!(windows),
             PageKind::TimeTracker => cfg!(windows),
             PageKind::Oyenza => st.oyenza.tab_visible(),
